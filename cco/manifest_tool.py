@@ -42,7 +42,7 @@ DEFAULT_ARTIFACT = "kernel.py"
 # Competition locked roots (files + dirs). Non-existent entries are skipped at generate time;
 # the canonical set is finalized in cco.config.json (Step 12) once the OC layout lands.
 DEFAULT_LOCKED_PATHS = [
-    "benchmark.py", "references", "kernel_configs", "cco", "champions",
+    "tools", "references", "kernel_configs", "cco", "champions",
     "runtime", "cco.config.json", "payload-schema.json", "pyproject.toml",
 ]
 
@@ -214,6 +214,7 @@ def main(argv=None) -> int:
     g.add_argument("--out", default="manifest.json", help="output path, or - for stdout")
     g.add_argument("--paths", nargs="*", default=None, help="locked paths (default: built-in set)")
     g.add_argument("--artifact", default=DEFAULT_ARTIFACT)
+    g.add_argument("--config", help="read locked_paths + artifact from a cco.config.json (authoritative)")
 
     v = sub.add_parser("verify", help="verify a working tree against a manifest")
     v.add_argument("--root", default=".")
@@ -225,7 +226,13 @@ def main(argv=None) -> int:
         return _self_test()
 
     if args.cmd == "generate":
-        man = compute_manifest(args.root, args.paths, args.artifact)
+        paths, artifact = args.paths, args.artifact
+        if args.config:
+            with open(args.config, "r", encoding="utf-8") as f:
+                _cfg = json.load(f)
+            paths = _cfg.get("locked_paths", paths)
+            artifact = _cfg.get("artifact", artifact)
+        man = compute_manifest(args.root, paths, artifact)
         text = json.dumps(man, indent=2, sort_keys=True) + "\n"
         if args.out == "-":
             sys.stdout.write(text)

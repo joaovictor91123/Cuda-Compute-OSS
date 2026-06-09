@@ -123,6 +123,29 @@ def load_policy_from_config(config_path: str) -> Policy:
     )
 
 
+def extract_kernel_type(source: str) -> "str | None":
+    """Statically read a module-level ``KERNEL_TYPE = "<str>"`` WITHOUT executing the submission
+    (so the agent can check the declared track before any rerun). Returns None if absent or not a
+    plain string literal."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id == "KERNEL_TYPE":
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                    return value.value
+                return None
+    return None
+
+
 @dataclass
 class Violation:
     category: str

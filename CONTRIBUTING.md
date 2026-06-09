@@ -1,329 +1,118 @@
-# Contributing to CCO
+# Contributing to CCO — Miner Guide
 
-Thanks for your interest. CCO's value compounds in proportion to how many people contribute kernels, benchmark numbers, and KB entries — every PR that improves any of those is welcome.
+**CCO is an objective GPU-kernel optimization competition on Bittensor subnet 74 (gittensor).**
+You (a "miner") submit one optimized kernel; if it beats the current champion — faster, still
+correct, no more VRAM — with statistical significance, it becomes the new champion and earns
+emissions while it holds the crown. There is no subjective review: a submission clears the bar or
+it doesn't.
 
-This document is the contributor's reference. It is intentionally explicit. New contributors should be able to read it once and know what an acceptable PR looks like.
-
----
-
-## Contents
-
-1. [Ways to contribute](#ways-to-contribute)
-2. [Development setup](#development-setup)
-3. [Adding a new kernel](#adding-a-new-kernel)
-4. [Submitting benchmark results](#submitting-benchmark-results)
-5. [Knowledge-base contributions](#knowledge-base-contributions)
-6. [Reflexion log format](#reflexion-log-format)
-7. [What `kernel.py` may not do](#what-kernelpy-may-not-do)
-8. [Code style & PR conventions](#code-style--pr-conventions)
-9. [Reporting bugs](#reporting-bugs)
-10. [Security](#security)
-11. [License](#license)
+This guide is the contributor's reference. Read it once and you'll know exactly what an acceptable
+submission looks like. For the architecture and threat model, see [DESIGN.md](DESIGN.md).
 
 ---
 
-## Ways to contribute
+## 1. The one rule
 
-The framework's value compounds across several axes. Pick the one that fits.
+**You may change exactly one file: `kernel.py`.** Everything else — the harness (`benchmark.py`),
+the correctness oracles (`references/`), the benchmark spec (`kernel_configs/`), the per-track
+champions (`champions/`), the config and runtime — is **locked** and byte-verified at your PR HEAD
+against `manifest.json` (Gate 2). A PR that touches anything else is rejected.
 
-### With an NVIDIA GPU
+## 2. The kernel contract
 
-- **Optimize a bundled kernel** — pick one from `kernels/`, run the protocol, land a `kernels_optimized/<name>.py`. The most direct path to growing `CUDA_OPTIMIZATION.md`.
-- **Submit a benchmark row** — fill in a `_TBD_` in `BENCHMARKS.md` on your hardware. See [#5](https://github.com/zeokin/Cuda-OSS/issues/5), [#17](https://github.com/zeokin/Cuda-OSS/issues/17).
-- **Add a new bundled kernel** — propose first in an issue (label `type:kernel-request`), then ship the four-piece package (baseline + reference + config + bench-passing).
-- **Add hardware-tier support** — wire roofline numbers for an unsupported GPU into `tools/bench.py`. Label `type:hardware-support`.
-
-### Without a GPU
-
-- **Documentation** — every doc file in this repo is contributor-improvable. The four references in [`docs/`](docs/) are especially valuable to keep accurate.
-- **Issue triage** — reproduce bugs, narrow scope, close stale issues, identify duplicates.
-- **KB review** — read `CUDA_OPTIMIZATION.md` and `memory/<kernel_type>.md` files; flag claims that aren't well supported by the linked experiment data.
-- **Walkthroughs** — write "your first contribution" guides under `docs/` for specific contributor profiles.
-- **Code review** — review open PRs, especially benchmark submissions and kernel additions.
-
-### Tooling
-
-- `tools/bench.py`, `tools/ncu_profile.py`, `tools/run_loop.py`, `tools/prepare.py`, `tools/merge_results.py` — all open to improvement. Label `type:tooling`. The constraint: tools must emit greppable `key=value` output that an LLM agent can parse without prose.
-
----
-
-## Development setup
-
-```bash
-git clone https://github.com/zeokin/Cuda-OSS.git
-cd Cuda-OSS
-
-# Install with dev extras
-uv sync --extra dev
-
-# Validate environment (skips GPU-dependent checks if no CUDA)
-uv run tools/prepare.py
-```
-
-You will need, for the full loop:
-
-- An NVIDIA GPU from [the targeted list](README.md#targeted-hardware)
-- CUDA Toolkit matching your driver
-- `ncu` (Nsight Compute CLI) on `PATH` for profiling contributions
-- Python 3.10+
-
-For docs-only / triage / review contributions: just a checkout and Python. No GPU required.
-
----
-
-## Adding a new kernel
-
-A kernel contribution needs four pieces in three places. Use an existing kernel (e.g. `rms_norm`) as the canonical example.
-
-### 1. Baseline kernel — `kernels/<name>.py`
-
-Must export:
+`kernel.py` must export exactly two names:
 
 ```python
-KERNEL_TYPE: str          # e.g. "rms_norm" — must match a kernel_configs/<name>.* pair
+KERNEL_TYPE = "rms_norm"   # one of the 5 tracks; selects the oracle/config/champion you compete on
 
-def kernel_fn(**inputs) -> torch.Tensor | tuple[torch.Tensor, ...]:
-    """The kernel under optimization. The agent edits this file."""
-
-def get_inputs() -> dict:
-    """Return one sample input dict for smoke tests."""
-
-def get_flops() -> int:
-    """Total FLOPs at the smoke-test size, for roofline."""
-
-def get_bytes() -> int:
-    """Total bytes read+written at the smoke-test size, for roofline."""
+def kernel_fn(**inputs):   # the kernel under test; called as kernel_fn(**inputs)
+    ...                    # returns a Tensor, or a tuple of Tensors for multi-output tracks
 ```
 
-The baseline must be a **working but un-optimized** implementation. Readability beats cleverness. The point is to have a clean "before" snapshot against which optimized versions are diffed.
+It must **not** export `get_inputs` / `get_flops` / `get_bytes` — inputs, FLOPs and bytes are owned
+by the locked `kernel_configs/`. The exact `kernel_fn` signature and the inputs you receive are
+defined per track:
 
-For CUDA C kernels: ship a sibling `kernels/<name>.cu` and have `kernels/<name>.py` compile it via `torch.utils.cpp_extension.load_inline()`.
+| Track | `kernel_fn(...)` | returns |
+|---|---|---|
+| `rms_norm` | `(x, weight, eps=1e-6)` | `Tensor` |
+| `matmul` | `(a, b)` | `Tensor` |
+| `qkv_part_rope` | `(qkv, cos, sin, q_heads, kv_heads, nope_dim)` | `Tensor` |
+| `swiglu_input_quant` | `(x)` | `(out, x_fp8, x_scale)` |
+| `dsa_forward` | `(q, k, v, block_indices, indices_blk_siz, scale, cu_seqlens_q, cu_seqlens_k, …)` | `(out, lse)` |
 
-### 2. Reference implementation — `references/<name>.py`
+The **current champion** at `champions/<track>/kernel.py` is the canonical, correct, working
+example for each track — start from it. The matching `kernel_configs/<track>.py` shows the exact
+input dict you'll receive.
 
-Pure PyTorch. No Triton. No custom CUDA. Used by the bench harness as the correctness oracle.
+## 3. No delegation — write a real kernel
 
-The simplest, most obviously-correct implementation wins. If `torch.nn.functional.rms_norm` exists, use it. The reference must be readable end-to-end in under a minute by anyone familiar with PyTorch — that is its job.
+The competition measures *the kernel you write*, not your ability to call a library. **v1 is
+Triton-only.** `kernel_fn` (and anything it calls) may **not**:
 
-### 3. Benchmark config — `kernel_configs/<name>.toml` + `kernel_configs/<name>.py`
+- call `torch.matmul / mm / bmm / addmm / einsum`, `torch.nn.functional.*` (rms_norm, softmax,
+  silu, scaled_dot_product_attention, …), `torch.ops.aten.*`, or the `@` matmul operator;
+- reach those through aliases, `getattr`, `eval`/`exec`, `importlib`, or tensor methods (`a.mm(b)`);
+- use inline CUDA-C (`torch.utils.cpp_extension`), `ctypes`/`cffi`, or any vendor BLAS/DNN call;
+- define `get_inputs`/`get_flops`/`get_bytes`.
 
-The TOML declares shapes, dtypes, tolerances:
+It **must** contain at least one `@triton.jit` kernel and do the actual compute there. Allowed in the
+Python wrapper: allocation (`torch.empty`/`empty_like`), reshape/view/transpose/contiguous, dtype
+casts, shape introspection, and launching your Triton kernel.
 
-```toml
-[[shapes]]
-name = "tiny"
-M = 128
-N = 256
-dtype = "bf16"
-atol = 1e-2
-rtol = 1e-2
+This is enforced **mechanically**, not by review: a static AST guard ([`cco/guard_kernel.py`](cco/guard_kernel.py))
+*and* a runtime trap ([`cco/dispatch_trap.py`](cco/dispatch_trap.py)) reject delegation before and
+during execution. Don't try to wrap cuBLAS — you'll be caught.
 
-[[shapes]]
-name = "production"
-M = 4096
-N = 5120
-dtype = "bf16"
-atol = 1e-2
-rtol = 1e-2
-```
-
-The companion `.py` provides callables matching the contract `kernel_configs/_utils.py` expects:
-
-```python
-def input_generator(shape: dict) -> dict: ...
-def reference_fn(**inputs) -> torch.Tensor | tuple[torch.Tensor, ...]: ...
-def flops_fn(shape: dict) -> int: ...
-def bytes_fn(shape: dict) -> int: ...
-```
-
-Both files are auto-discovered by `tools/bench.py` at import time — no central registry to update.
-
-### 4. Validate end-to-end
+## 4. Self-score locally
 
 ```bash
-cp kernels/<name>.py kernel.py
-uv run tools/bench.py          # full pipeline must pass (correctness PASS, all 5 stages)
-uv run tools/bench.py --quick  # quick pipeline must pass
-uv run tools/ncu_profile.py    # NCU must produce a valid report
+uv run tools/bench.py                 # full 5-stage correctness + roofline (on the published self-score seed=42)
+uv run tools/bench.py --score         # the competition latency SAMPLE on the primary size
+uv run tools/bench.py --blob          # the full bound score blob the maintainer will verify
+uv run --no-project python cco/guard_kernel.py kernel.py    # check you didn't delegate
 ```
 
-Open the PR only after all three commands succeed on at least one targeted GPU. Attach the output of `tools/prepare.py` so reviewers can match your environment.
+Self-scoring uses the **published seed (42)** so you can iterate. The canonical rerun uses a secret
+seed derived from your PR HEAD SHA, so you cannot precompute or memorize outputs — your kernel must
+be genuinely general. (No GPU? You can at least run the AST guard, which is pure Python.)
 
----
+## 5. Submit
 
-## Submitting benchmark results
+1. Register a hotkey on SN74 and bind your GitHub identity (das-gittensor).
+2. Put your kernel in `kernel.py`, commit it (only `kernel.py` changed).
+3. Open a PR using the template: the fenced **JSON payload** (`payload-schema.json`) + the
+   acknowledgement checkboxes. Sign `<commit_sha>:<kernel_sha256>:<kernel_type>` with your hotkey.
+4. The PR is **frozen** once the gates pass — any edit (even a typo fix) closes it; open a fresh PR.
 
-Benchmark rows in `BENCHMARKS.md` are the public-facing evidence of CCO's claims. We will not publish a row whose numbers we cannot reproduce.
+## 6. How you're scored
 
-### Prerequisites
+A stateless maintainer agent walks cheap gates (identity → manifest → no-delegation static scan →
+threshold), then runs a **canonical rerun** on trusted GPU hardware:
 
-- The kernel must already exist in `kernels/` and `kernels_optimized/`
-- Numbers must come from `tools/bench.py`, not a custom harness
-- You must have run the **full optimization loop** (multiple experiments through `tools/run_loop.py`), not a one-shot edit
+- **Correctness is a hard gate** — all 5 stages must PASS (smoke, shape sweep, numerical stability,
+  within-tolerance determinism, edge cases) against the locked oracle on the secret-seeded inputs.
+- **The scored axis is speedup vs the current champion** (not vs PyTorch). Champion and challenger
+  are re-run fresh and interleaved; you win only if a **Mann-Whitney U** test says you're faster
+  **and** you beat the champion by at least the configured margin. A sub-noise or below-margin win
+  does not take the crown.
+- **VRAM is a non-regression guard** — you can't win by blowing up scratch memory.
 
-### Required content in the PR
+Emissions are **king-of-the-hill**: only the PR currently holding `cco-winner-<track>` earns, and a
+fixed base score means you're paid for *holding* the frontier, not for the size of one win. When a
+new winner lands, your label is stripped.
 
-Use this template in the PR body:
+**Rate limit:** 1 canonical rerun / hotkey / 24h (a new PR resets the clock — PR spam is
+negative-EV). Hotkeys that repeatedly fail the rerun lose credibility and hit a banlist.
 
-```markdown
-## Benchmark submission
+## 7. Reporting bugs / security
 
-- **Kernel:** `rms_norm`
-- **GPU:** NVIDIA H100 80GB HBM3
-- **Driver:** 550.54.15
-- **CUDA:** 12.4
-- **Triton:** 3.1.0
-- **Agent + model:** Claude Opus 4.7
-- **Final git SHA:** `<sha>`
-- **Accepted iterations:** 14
-- **Baseline (ms):** 0.612
-- **Optimized (ms):** 0.341
-- **Speedup:** 1.79×
-- **% of peak (BW or FLOPs as relevant):** 87.4% BW
-- **Token cost (input + output):** 412k / 38k
-```
+Open an issue with GPU/driver/CUDA, the exact command, and the full error (don't summarize the
+stack trace). For a **correctness** bug, include the shapes/dtypes and the `pct_within_tol` figure.
+Do **not** file security issues publicly — email the maintainer first; a leaked token in git history
+must be revoked, not just rotated.
 
-Attach `workspace/results.tsv` to the PR (or paste the last 10 rows inline). Attach the relevant `memory/<kernel_type>.md` so reviewers can read the reasoning trail.
+## 8. License
 
-PRs that change a row without attached artifacts will be asked for them before merge. PRs that change a row downward (regression) require a separate `type:perf-regression` issue first.
-
----
-
-## Knowledge-base contributions
-
-`CUDA_OPTIMIZATION.md` is the project's long-term artifact. It is maintained primarily by the agent during runs, but human PRs that refine or correct entries are welcome.
-
-### Format
-
-The file has two tiers:
-
-**Per-kernel section** — one section per kernel type. Each contains:
-
-- A short *Characteristics* block (bottleneck class, data access pattern, typical sizes).
-- *Effective Optimizations* — numbered list, each with the technique, why it works, expected speedup range, and tagged bottleneck categories in square brackets (`[register-pressure]`, `[occupancy]`, `[cache]`, …).
-- *Anti-patterns* — things that were tried and failed, with the observed regression.
-
-**Cross-Kernel Optimization Patterns section** — indexed by bottleneck tag, not by kernel. Promote a pattern here when it has been confirmed across multiple kernel types.
-
-### Rules for an entry
-
-A KB entry should:
-
-- Cite the source kernel and link the originating experiment row in `workspace/results.tsv` (or the relevant `memory/<kernel_type>.md` block).
-- Quote concrete numbers (`+40% latency`, `register count 96 → 39`, `L1 hit rate 0% → 32%`), not adjectives ("significant improvement").
-- Identify the *bottleneck* the technique addresses, not just the *change*.
-- For anti-patterns: explain *why* it failed, with NCU evidence where available.
-
-### When to promote to "Cross-Kernel Patterns"
-
-A pattern earns promotion when it has been observed and confirmed in **at least three accepted experiments across at least two distinct kernel types**, with consistent direction of effect. Patterns that work on one kernel and backfire on another stay in the per-kernel sections (often as anti-patterns for the second kernel).
-
-### What does NOT belong in the KB
-
-- One-off shape-specific tunings (`BLOCK_SIZE_M=128 for M=4096, N=5120 on H100` is per-config, not pattern-level).
-- Speculation. Every claim should be backed by an experiment row.
-- Code samples. The KB describes *what* and *why*; the kernel source is *how*.
-
----
-
-## Reflexion log format
-
-After each experiment (kept *or* reverted), append a structured Reflexion block to `memory/<kernel_type>.md`. This captures the *reasoning* that the bare results.tsv row cannot — the predicted-vs-actual delta, whether the diagnosis was correct, and what should be believed going forward.
-
-The format (also documented in [#22](https://github.com/zeokin/Cuda-OSS/issues/22)):
-
-```markdown
-### Reflexion — <experiment_id>
-- **Diagnosed:** <1-sentence root cause grounded in NCU + macro analysis>
-- **Hypothesis:** <what change was made and why it was expected to help>
-- **Expected delta:** <e.g. "+5–10% throughput" / "reduce L2 miss rate by half">
-- **Actual delta:** <measured outcome from bench.py>
-- **Diagnosis correct?** yes / partial / no — <one phrase>
-- **Lesson:** <1–2 sentences future runs should know>
-```
-
-When the same lesson appears in ≥3 reflexion blocks across ≥2 distinct kernel types, promote it to `CUDA_OPTIMIZATION.md § Cross-Kernel Optimization Patterns` with the appropriate bottleneck tag.
-
-The Reflexion log is what turns the project's data into knowledge. Skipping it is the single fastest way to break the KB-as-artifact bet.
-
----
-
-## What `kernel.py` may not do
-
-The framework optimizes *the kernel you write*, not your ability to delegate to a library. A `kernel_fn` that calls back to PyTorch for the computation is forbidden, even though it would pass correctness.
-
-### Forbidden in the body of `kernel_fn` (and any helper it calls)
-
-- `torch.nn.functional.rms_norm`, `torch.nn.functional.layer_norm`
-- `torch.nn.functional.scaled_dot_product_attention`
-- `torch.nn.functional.silu`, `torch.nn.functional.softmax`
-- `torch.matmul`, `torch.mm`, `torch.bmm`, `torch.einsum`
-- `torch.ops.aten.*` for the same ops
-- Anything else that re-implements the kernel via a vendor or framework call
-
-### Permitted
-
-- Tensor allocation: `torch.empty`, `torch.zeros`, `torch.ones`
-- Reshape / view / transpose: `.view()`, `.reshape()`, `.transpose()`, `.contiguous()`
-- Dtype casts: `.to(dtype)`, `.float()`, `.half()`
-- Shape introspection: `.shape`, `.stride()`, `.dim()`
-
-The rule exists because a delegated `kernel_fn` would pass the 5-stage correctness check, report whatever roofline percentage the delegated op happens to hit, look like a legitimate optimization, and then poison `CUDA_OPTIMIZATION.md` with a "lesson" that has no relation to any kernel code we actually wrote. The KB is the artifact. The KB cannot tolerate this.
-
-[#21](https://github.com/zeokin/Cuda-OSS/issues/21) tracks the AST-level guard in `tools/bench.py`. Until that lands, the rule is enforced by review — reviewers will reject any kernel that delegates.
-
----
-
-## Code style & PR conventions
-
-### Style
-
-- Python ≥ 3.10. Type hints encouraged but not required inside kernel code.
-- `ruff` for lint — run `uv run ruff check .` locally. CI runs `ruff check .` directly (no `uv sync`) so the lint job stays under a second. Line length 120, see `pyproject.toml`.
-- No new top-level runtime dependencies without prior discussion in an issue. The framework's small surface is a feature.
-- Tools must emit **greppable `key=value` output**, not prose. An LLM agent parses this; nothing should require regex over English.
-
-### PRs
-
-- One logical change per PR.
-- Title format: `feat(kernel): add foo_kernel` / `fix(bench): handle dtype mismatch` / `docs: …` / `chore: …`.
-- Reference any related issue in the description.
-- For kernel additions, include a short paragraph on what the kernel computes and where it's used (which model family, which layer, paper if relevant).
-- For benchmark submissions, include the template in [Submitting benchmark results](#submitting-benchmark-results).
-- For doc/KB changes, link to the experiment(s) that motivated the change.
-
-### Things that will get a PR sent back
-
-- Adding a new top-level dependency without discussion
-- Touching `references/<name>.py` without a correctness-related reason
-- Adding code to `tools/` that imports a kernel — tools should be kernel-agnostic
-- KB entries with no experiment data behind them
-- A `kernels_optimized/<name>.py` that does not pass the 5 correctness stages on at least one targeted GPU
-
----
-
-## Reporting bugs
-
-Open an issue with:
-
-- GPU model, driver, CUDA version (paste `nvidia-smi` and `nvcc --version`)
-- The exact command that triggered the bug
-- The full error output (do not summarize — the stack trace matters)
-- A minimal repro if you can produce one
-- Whether `tools/prepare.py` passes; if not, paste its output
-
-For correctness bugs in a kernel: also include the input shapes and dtypes that triggered the discrepancy, and the `pct_within_tol` figure from the bench output.
-
-Use these labels where possible: `type:bug`, `type:correctness`, `type:tooling`, `type:perf-regression`. Maintainers will assign priority (`P0…P3`).
-
----
-
-## Security
-
-Do not file security issues in the public tracker. Email the maintainer privately first. The `gh` token in any repo's git history is a security issue and must be revoked, not just rotated.
-
----
-
-## License
-
-By contributing you agree that your contribution is licensed under the MIT License (see [LICENSE](LICENSE)). The MIT license is non-negotiable — CCO depends on it staying permissive so optimized kernels can ship into closed-source production.
+MIT (see [LICENSE](LICENSE)). By contributing you agree your contribution is MIT-licensed — CCO
+depends on staying permissive so winning kernels can ship into production.

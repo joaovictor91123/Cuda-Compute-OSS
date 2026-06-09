@@ -1,22 +1,35 @@
-<!-- Read CONTRIBUTING.md before opening this PR. Maintainer review guide: maintainer/03-pr-types.md -->
+<!-- Read CONTRIBUTING.md before opening this PR.
+     ONLY the fenced JSON payload below, the acknowledgement checkboxes, and this body's hash
+     carry authority. All other prose (title, this description, comments) is non-authoritative and
+     is ignored by the maintainer agent. Editing the PR after the gates pass closes it — open a
+     fresh PR instead. -->
 
-## Summary
+## Optimization
 
-<!-- One sentence: what changed. -->
+<!-- One sentence describing your optimization. Human-readable only; not scored. -->
 
-## Why
+## Submission payload
 
-<!-- Link to a related issue with `Closes #N` (auto-closes on merge) or `Refs #N`. Add motivation if not obvious from the issue. -->
+<!-- Fill in every field. Schema: payload-schema.json. `signature` is your SN74 hotkey signing the
+     message `<commit_sha>:<kernel_sha256>:<kernel_type>`. `claimed_speedup` is advisory only —
+     the canonical rerun is authoritative. -->
 
-## Verification
+```json
+{
+  "version": 1,
+  "commit_sha": "<40-hex PR HEAD commit sha>",
+  "kernel_type": "<rms_norm | matmul | qkv_part_rope | swiglu_input_quant | dsa_forward>",
+  "kernel_sha256": "<sha256 of your kernel.py>",
+  "hotkey": "<your SN74 SS58 hotkey>",
+  "signature": "<hotkey signature over commit_sha:kernel_sha256:kernel_type>",
+  "claimed_speedup": 1.00
+}
+```
 
-<!-- How did you verify this works? E.g. `tools/bench.py` output, manual test, CI alone. If you could not verify end-to-end (e.g. baselines not landed yet), say so explicitly — the maintainer will decide whether code-inspection is sufficient. -->
+## Acknowledgements
 
-## Checklist
-
-- [ ] Read [CONTRIBUTING.md](../CONTRIBUTING.md)
-- [ ] One logical change per PR — one of: new kernel / optimization / benchmark / tooling / docs / KB / hardware-tier / bug fix (see [`maintainer/03-pr-types.md`](../maintainer/03-pr-types.md))
-- [ ] For **tooling** PRs (`tools/*.py`, `.github/workflows/*`): existing `key=value` output keys are unchanged
-- [ ] For **kernel** PRs: `kernel_fn` does not call back to PyTorch ops (see [CONTRIBUTING.md § What kernel.py may not do](../CONTRIBUTING.md#what-kernelpy-may-not-do))
-- [ ] For **benchmark** PRs: used the template from [`maintainer/templates/pr-benchmark-submission.md`](../maintainer/templates/pr-benchmark-submission.md) and attached `workspace/results.tsv` + `tools/prepare.py` output
-- [ ] CI is green (or the PR fixes a CI bug — explain)
+- [ ] I read [CONTRIBUTING.md](../CONTRIBUTING.md) and [DESIGN.md](../DESIGN.md).
+- [ ] This PR changes **only** `kernel.py` — no other file is added, modified, or removed.
+- [ ] `kernel.py` is a real **Triton** kernel: it does **not** delegate the computation to `torch.matmul`/`mm`/`bmm`, `torch.nn.functional.*`, the `@` operator, `torch.ops.aten.*`, cuBLAS/cuDNN, or inline CUDA-C (see CONTRIBUTING § No delegation).
+- [ ] My SN74 hotkey is bound to this GitHub identity (das-gittensor) and the payload signature verifies.
+- [ ] I self-scored locally and got `correctness: PASS` on the declared track.

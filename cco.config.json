@@ -3,13 +3,13 @@
   "repo": "zeokin/Cuda-Compute-OSS",
   "version": 1,
   "artifact": "kernel.py",
-  "harness": "benchmark.py",
+  "harness": "tools/bench.py",
   "kernel_language": "triton",
   "tracks": ["rms_norm", "matmul", "qkv_part_rope", "swiglu_input_quant", "dsa_forward"],
   "kernel_py_size_cap_bytes": 65536,
 
   "locked_paths": [
-    "benchmark.py",
+    "tools",
     "references",
     "kernel_configs",
     "cco",
