@@ -1,13 +1,9 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Submit a benchmark row
-    url: https://github.com/zeokin/Cuda-OSS/blob/main/maintainer/templates/pr-benchmark-submission.md
-    about: Benchmark submissions go directly as PRs, using the linked template — not as issues.
-
   - name: Discord — questions, help, real-time discussion
     url: https://discord.gg/kEHZ3wJuHM
-    about: Channels include #help, #kernels, #benchmarks, #agent-prompts, #papers, #hardware.
+    about: Channels include #help, #kernels, #benchmarks, #hardware.
 
   - name: CONTRIBUTING.md
-    url: https://github.com/zeokin/Cuda-OSS/blob/main/CONTRIBUTING.md
+    url: https://github.com/zeokin/Cuda-Compute-OSS/blob/main/CONTRIBUTING.md
     about: Kernel contract, code style, PR conventions, the no-torch-delegation rule.

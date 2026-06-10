@@ -1,7 +1,7 @@
 <!-- Read CONTRIBUTING.md before opening this PR.
      ONLY the fenced JSON payload below, the acknowledgement checkboxes, and this body's hash
      carry authority. All other prose (title, this description, comments) is non-authoritative and
-     is ignored by the maintainer agent. Editing the PR after the gates pass closes it — open a
+     is ignored by the automated gates. Editing the PR after the gates pass closes it — open a
      fresh PR instead. -->
 
 ## Optimization
@@ -31,5 +31,5 @@
 - [ ] I read [CONTRIBUTING.md](../CONTRIBUTING.md) and [DESIGN.md](../DESIGN.md).
 - [ ] This PR changes **only** `kernel.py` — no other file is added, modified, or removed.
 - [ ] `kernel.py` is a real **Triton** kernel: it does **not** delegate the computation to `torch.matmul`/`mm`/`bmm`, `torch.nn.functional.*`, the `@` operator, `torch.ops.aten.*`, cuBLAS/cuDNN, or inline CUDA-C (see CONTRIBUTING § No delegation).
-- [ ] My SN74 hotkey is bound to this GitHub identity (das-gittensor) and the payload signature verifies.
+- [ ] My SN74 hotkey is bound to this GitHub identity and the payload signature verifies.
 - [ ] I self-scored locally and got `correctness: PASS` on the declared track.

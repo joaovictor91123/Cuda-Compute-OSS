@@ -67,9 +67,9 @@ during execution. Don't try to wrap cuBLAS — you'll be caught.
 ## 4. Self-score locally
 
 ```bash
-uv run tools/bench.py                 # full 5-stage correctness + roofline (on the published self-score seed=42)
-uv run tools/bench.py --score         # the competition latency SAMPLE on the primary size
-uv run tools/bench.py --blob          # the full bound score blob the maintainer will verify
+uv run benchmark.py                   # full 5-stage correctness + roofline (on the published self-score seed=42)
+uv run benchmark.py --score           # the competition latency SAMPLE on the primary size
+uv run benchmark.py --blob            # the full bound score blob the canonical rerun verifies
 uv run --no-project python cco/guard_kernel.py kernel.py    # check you didn't delegate
 ```
 
@@ -79,7 +79,7 @@ be genuinely general. (No GPU? You can at least run the AST guard, which is pure
 
 ## 5. Submit
 
-1. Register a hotkey on SN74 and bind your GitHub identity (das-gittensor).
+1. Register a hotkey on SN74 and bind your GitHub identity to it.
 2. Put your kernel in `kernel.py`, commit it (only `kernel.py` changed).
 3. Open a PR using the template: the fenced **JSON payload** (`payload-schema.json`) + the
    acknowledgement checkboxes. Sign `<commit_sha>:<kernel_sha256>:<kernel_type>` with your hotkey.
@@ -87,7 +87,7 @@ be genuinely general. (No GPU? You can at least run the AST guard, which is pure
 
 ## 6. How you're scored
 
-A stateless maintainer agent walks cheap gates (identity → manifest → no-delegation static scan →
+CCO's automated gate pipeline walks cheap gates (identity → manifest → no-delegation static scan →
 threshold), then runs a **canonical rerun** on trusted GPU hardware:
 
 - **Correctness is a hard gate** — all 5 stages must PASS (smoke, shape sweep, numerical stability,
@@ -109,7 +109,7 @@ negative-EV). Hotkeys that repeatedly fail the rerun lose credibility and hit a 
 
 Open an issue with GPU/driver/CUDA, the exact command, and the full error (don't summarize the
 stack trace). For a **correctness** bug, include the shapes/dtypes and the `pct_within_tol` figure.
-Do **not** file security issues publicly — email the maintainer first; a leaked token in git history
+Do **not** file security issues publicly — use GitHub's private vulnerability reporting first; a leaked token in git history
 must be revoked, not just rotated.
 
 ## 8. License

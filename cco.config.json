@@ -3,13 +3,13 @@
   "repo": "zeokin/Cuda-Compute-OSS",
   "version": 1,
   "artifact": "kernel.py",
-  "harness": "tools/bench.py",
+  "harness": "benchmark.py",
   "kernel_language": "triton",
   "tracks": ["rms_norm", "matmul", "qkv_part_rope", "swiglu_input_quant", "dsa_forward"],
   "kernel_py_size_cap_bytes": 65536,
 
   "locked_paths": [
-    "tools",
+    "benchmark.py",
     "references",
     "kernel_configs",
     "cco",
@@ -121,7 +121,7 @@
   },
 
   "gate4": {
-    "_comment": "v1 posture: canonical rerun on a trusted maintainer GPU box, hardware attestation deferred to v2 (Polaris GPU-TEE / Phala / Azure). The GPU SKU is pinned in runtime/gpu.config and is part of the locked 'model'.",
+    "_comment": "v1 posture: canonical rerun on a trusted, pinned GPU host; hardware attestation deferred to v2 (GPU confidential-compute / TEE). The GPU SKU is pinned in runtime/gpu.config and is part of the locked 'model'.",
     "attestation": "deferred_v2",
     "egress": "deny_all",
     "exclusive_gpu": true,

@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-bench.py -- cuda-evolve benchmark harness (FIXED -- the agent NEVER modifies this file).
+benchmark.py -- CCO benchmark harness (LOCKED -- byte-verified against manifest.json; the
+miner NEVER modifies this file).
 
 Handles:
   1. GPU hardware detection and roofline modelling
   2. Correctness verification (5 stages)
   3. Performance benchmarking (Triton do_bench)
-  4. Structured, greppable output for the agent loop
+  4. Structured, greppable output + the bound score blob (--blob)
 
 Usage:
-  uv run tools/bench.py                        # benchmark kernel.py using its KERNEL_TYPE
-  uv run tools/bench.py --kernel matmul        # force kernel type
-  uv run tools/bench.py --quick                # skip stages 3-5, bench only large size
-  uv run tools/bench.py --profile              # emit torch profiler trace
-  uv run tools/bench.py --sizes large          # benchmark only 'large' size
+  uv run benchmark.py                        # benchmark kernel.py using its KERNEL_TYPE
+  uv run benchmark.py --kernel matmul        # force kernel type
+  uv run benchmark.py --quick                # skip stages 3-5, bench only large size
+  uv run benchmark.py --score                # emit the competition latency sample
+  uv run benchmark.py --blob                 # emit the bound score blob the canonical rerun verifies
 """
 
 from __future__ import annotations
@@ -853,7 +854,7 @@ def run_scored_sample(kernel_fn: Callable, config: dict, seed: int = 42,
                       n_buffers: int = 4) -> dict:
     """Competition scoring measurement (Step 7).
 
-    Emits a SAMPLE of per-call latencies on the primary (scored) size + dtype for the maintainer's
+    Emits a SAMPLE of per-call latencies on the primary (scored) size + dtype for the
     challenger-vs-champion significance test (cco/significance.py). Anti-cheat properties baked in:
       * input buffers ROTATE across reps (distinct seeds -> distinct values & storage), so a kernel
         can't win via warm-L2 residency or memoize-by-pointer;
@@ -983,7 +984,7 @@ def run_profile(kernel_fn: Callable, config: dict, seed: int = 42):
 def main():
     t_start = time.time()
 
-    parser = argparse.ArgumentParser(description="cuda-evolve benchmark harness")
+    parser = argparse.ArgumentParser(description="CCO benchmark harness")
     parser.add_argument("--kernel", type=str, default=None,
                         help="Kernel type to benchmark (default: read from kernel.py)")
     parser.add_argument("--sizes", type=str, default="all",
@@ -1002,7 +1003,7 @@ def main():
                              "size, with fused correctness + buffer rotation, for the significance test.")
     parser.add_argument("--blob", action="store_true",
                         help="Emit the bound score blob (sample + correctness + identity hashes + "
-                             "blob_sha256) the maintainer agent verifies. Implies the scored sample.")
+                             "blob_sha256) the gate pipeline verifies. Implies the scored sample.")
     args = parser.parse_args()
     json_stdout = sys.stdout
     if args.json:
@@ -1012,7 +1013,7 @@ def main():
     # Import the kernel module
     # ------------------------------------------------------------------
     print("=" * 60)
-    print("cuda-evolve Benchmark Harness")
+    print("CCO Benchmark Harness")
     print("=" * 60)
 
     kernel_module = None
@@ -1020,7 +1021,7 @@ def main():
     kernel_type = args.kernel
 
     try:
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        repo_root = os.path.dirname(os.path.abspath(__file__))
         if repo_root not in sys.path:
             sys.path.insert(0, repo_root)
         if os.getcwd() not in sys.path:

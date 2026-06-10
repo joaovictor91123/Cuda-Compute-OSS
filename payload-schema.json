@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CCO competition PR payload",
-  "description": "The single fenced JSON block a miner includes in their PR body. Per the OC protocol, ONLY this payload (plus the acknowledgement checkboxes and the body hash) carries authority — all other prose in the PR is non-authoritative decoration.",
+  "description": "The single fenced JSON block a miner includes in their PR body. ONLY this payload (plus the acknowledgement checkboxes and the body hash) carries authority — all other prose in the PR is non-authoritative decoration.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "commit_sha", "kernel_type", "kernel_sha256", "hotkey", "signature"],
@@ -29,7 +29,7 @@
     "hotkey": {
       "type": "string",
       "pattern": "^[1-9A-HJ-NP-Za-km-z]{47,48}$",
-      "description": "SN74 SS58 hotkey address, bound to the miner's GitHub identity via das-gittensor (Gate 1)."
+      "description": "SN74 SS58 hotkey address, bound to the miner's GitHub identity (Gate 1)."
     },
     "signature": {
       "type": "string",

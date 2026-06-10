@@ -16,7 +16,7 @@
 Miners submit one optimized CUDA/Triton kernel. A locked benchmark harness verifies correctness
 against a PyTorch oracle and times it on real hardware; if it beats the current champion — faster,
 still correct, no more VRAM — with statistical significance, it becomes the new champion and earns
-TAO emissions while it holds the crown. There is no subjective maintainer judgment: a submission
+TAO emissions while it holds the crown. There is no subjective review: a submission
 clears the statistical bar or it doesn't.
 
 You optimize one file (`kernel.py`); everything else is locked and byte-verified.
@@ -48,7 +48,7 @@ auto-discovers them.
 ```
  miner: optimize kernel.py  ─►  sign + open PR (JSON payload)
                                      │
-   ┌──────────── maintainer agent (stateless gates; default verdict = reject) ───────────┐
+   ┌──────── automated gate pipeline (stateless gates; default verdict = reject) ────────┐
    │  identity (GitHub↔hotkey↔SN74)  →  manifest (only kernel.py may differ)              │
    │  no-delegation AST scan  →  CANONICAL RERUN on trusted GPU (PR-HEAD-seeded inputs)   │
    └───────────────────────────────────────────────┬──────────────────────────────────────┘
@@ -59,8 +59,8 @@ auto-discovers them.
         else → close PR, credibility decrement
 ```
 
-The harness ([`tools/bench.py`](tools/bench.py)) makes **no** decision — it emits a bound,
-tamper-evident **score blob** (sample + correctness + identity hashes). The maintainer agent
+The harness ([`benchmark.py`](benchmark.py)) makes **no** decision — it emits a bound,
+tamper-evident **score blob** (sample + correctness + identity hashes). CCO's gate pipeline
 compares the challenger's blob to the champion's with a nonparametric test. Details in
 [DESIGN.md](DESIGN.md).
 
@@ -69,11 +69,11 @@ compares the challenger's blob to the champion's with a nonparametric test. Deta
 ## Quick start (miners)
 
 ```bash
-uv run tools/prepare.py                 # validate environment (CUDA, Triton, GPU)
 cp champions/rms_norm/kernel.py kernel.py   # start from the current champion of a track
 # ... edit kernel.py (Triton only; no delegation) ...
-uv run tools/bench.py                   # full correctness + roofline (self-score seed=42)
-uv run tools/bench.py --score           # the competition latency sample
+uv run benchmark.py                     # full correctness + roofline (self-score seed=42)
+uv run benchmark.py --score             # the competition latency sample
+uv run benchmark.py --blob              # the bound score blob the canonical rerun verifies
 uv run --no-project python cco/guard_kernel.py kernel.py   # confirm no delegation
 ```
 
@@ -81,23 +81,23 @@ Then sign and open a PR with the [payload](payload-schema.json). Full rules:
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
 > **Environment:** the competition is Linux + CUDA + Triton. Triton has no Windows wheels, so on
-> Windows use WSL2. The canonical scoring rerun runs on the maintainer's pinned GPU SKU.
+> Windows use WSL2. The canonical scoring rerun runs on a pinned GPU SKU.
 
 ---
 
 ## Project status
 
-Early development; pivoting onto gittensor SN74. The scoring stack is built and validated on real
-hardware; the subnet wiring (maintainer-agent onboarding, attested compute) is in progress.
+Early development, targeting gittensor SN74. The scoring stack is built and validated on real
+hardware; the on-chain wiring (gate-pipeline automation, attested compute) is in progress.
 
 | Area | Status |
 |---|---|
 | Anti-cheat (no-delegation static guard + runtime trap, manifest integrity) | **Ready** |
-| Locked scorer (`bench.py`: seeded inputs, fused-correctness latency sample, bound blob) | **Ready** |
+| Locked scorer (`benchmark.py`: seeded inputs, fused-correctness latency sample, bound blob) | **Ready** |
 | Significance / win decision (`cco/significance.py`) | **Ready** |
 | 5 champion kernels (`champions/`) | **Ready** (GPU-validated) |
 | Config + payload schema (`cco.config.json`, `payload-schema.json`) | **Ready** |
-| Runtime image, GPU-attested rerun, maintainer-agent onboarding | **In progress** |
+| Runtime image, GPU-attested rerun, on-chain gate automation | **In progress** |
 | Benchmark/leaderboard numbers | **Awaiting the first canonical runs** |
 
 ---
@@ -105,8 +105,8 @@ hardware; the subnet wiring (maintainer-agent onboarding, attested compute) is i
 ## Repository layout
 
 ```
-kernel.py                 # *** THE MINER FILE *** (KERNEL_TYPE + kernel_fn); transient, not tracked
-tools/bench.py            # locked scorer: 5-stage correctness + roofline + --score / --blob
+kernel.py                 # *** THE MINER FILE *** (KERNEL_TYPE + kernel_fn); the one mutable artifact
+benchmark.py              # locked scorer: 5-stage correctness + roofline + --score / --blob
 cco/                      # enforcement: guard_kernel, dispatch_trap, manifest_tool, seed, significance, blob
 references/               # locked pure-PyTorch correctness oracles (5)
 kernel_configs/           # locked benchmark spec + input generation (5)

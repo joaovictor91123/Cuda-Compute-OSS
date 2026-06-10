@@ -52,7 +52,7 @@ body:
       label: Command that triggered the bug
       description: The exact command line. Include flags.
       render: bash
-      placeholder: uv run tools/bench.py --kernel rms_norm
+      placeholder: uv run benchmark.py --kernel rms_norm
     validations:
       required: true
 
@@ -72,8 +72,8 @@ body:
       description: If you can isolate the bug to a small snippet, include it here. Otherwise the command above is enough.
 
   - type: textarea
-    id: prepare
+    id: env
     attributes:
-      label: "`tools/prepare.py` output (optional)"
-      description: The output of `uv run tools/prepare.py` — helps the maintainer confirm your environment matches what's supported.
+      label: "Environment / GPU info (optional)"
+      description: The `=== GPU INFO ===` block printed by `uv run benchmark.py` — helps confirm your environment matches what's supported.
       render: text

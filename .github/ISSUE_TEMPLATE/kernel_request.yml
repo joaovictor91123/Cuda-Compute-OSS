@@ -8,7 +8,7 @@ body:
       value: |
         Kernel choice is a strategy-level decision — open an issue first so we can discuss whether this kernel is the right next addition before any code is written.
 
-        See [`maintainer/03-pr-types.md § Type 1`](../blob/main/maintainer/03-pr-types.md) for the full acceptance criteria once we agree the kernel should land. Surprise kernel PRs (no prior `type:kernel-request` issue) are declined.
+        A new track is additive — it needs an oracle (`references/<name>.py`), a spec (`kernel_configs/<name>.{py,toml}`), a Triton champion (`champions/<name>/kernel.py`), and a `cco-winner-<name>` label. See [DESIGN.md](../blob/main/DESIGN.md) and [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). Surprise kernel PRs (no prior `type:kernel-request` issue) are declined.
 
   - type: input
     id: kernel-name
@@ -39,15 +39,15 @@ body:
     id: why-now
     attributes:
       label: Why is this the right next kernel?
-      description: How does it expand coverage vs. the five bundled kernels (`rms_norm`, `qkv_part_rope`, `swiglu_input_quant`, `persistent_matmul`, `dsa_forward`)? What bottleneck pattern would it exercise?
+      description: How does it expand coverage vs. the five bundled tracks (`rms_norm`, `matmul`, `qkv_part_rope`, `swiglu_input_quant`, `dsa_forward`)? What bottleneck pattern would it exercise?
     validations:
       required: true
 
   - type: textarea
     id: existing-coverage
     attributes:
-      label: Relevant existing KB entries (optional)
-      description: What in [`CUDA_OPTIMIZATION.md § Cross-Kernel Optimization Patterns`](../blob/main/CUDA_OPTIMIZATION.md) would already apply to this kernel?
+      label: Relevant optimization patterns (optional)
+      description: Which patterns in the [optimization references](../blob/main/docs/) (`docs/compute_optimization.md`, `docs/memory_optimization.md`) would already apply to this kernel?
 
   - type: textarea
     id: typical-shapes

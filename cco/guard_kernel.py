@@ -23,7 +23,7 @@ and (in strict mode) requires the submission to define `kernel_fn` and at least 
 
 It resolves simple import aliases (`import torch.nn.functional as F`,
 `from torch import matmul`) so `F.rms_norm(...)` and a bare `matmul(...)` are both caught.
-Per the OC framework the default verdict is REJECT: anything the scanner cannot prove
+The default verdict is REJECT: anything the scanner cannot prove
 benign (e.g. a call through a dynamically constructed name) is flagged.
 
 This is necessary, not sufficient — the runtime TorchDispatchMode/cuBLAS trap (Step 2)
@@ -125,7 +125,7 @@ def load_policy_from_config(config_path: str) -> Policy:
 
 def extract_kernel_type(source: str) -> "str | None":
     """Statically read a module-level ``KERNEL_TYPE = "<str>"`` WITHOUT executing the submission
-    (so the agent can check the declared track before any rerun). Returns None if absent or not a
+    (so the gate pipeline can check the declared track before any rerun). Returns None if absent or not a
     plain string literal."""
     try:
         tree = ast.parse(source)

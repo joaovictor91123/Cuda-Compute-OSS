@@ -1,7 +1,7 @@
 """
 cco/gate.py — Gate 3 cheap static checks (Step 15).
 
-The maintainer agent runs these on a submitted kernel.py BEFORE any GPU spend (default verdict =
+The gate pipeline runs these on a submitted kernel.py BEFORE any GPU spend (default verdict =
 reject). Three deterministic checks bundled into one verdict:
 
   1. size cap     — kernel.py <= `kernel_py_size_cap_bytes` (no embedded lookup tables / data blobs);
@@ -10,8 +10,8 @@ reject). Three deterministic checks bundled into one verdict:
                     declaring an easier track, or being scored against the wrong oracle/champion;
   3. no delegation — the static AST scan (cco/guard_kernel.py).
 
-The agent then diffs the PR against `champions/<kernel_type>/` and, on a win, applies the
-`cco-winner-<kernel_type>` label (that orchestration is the agent's, not this module's).
+The gate pipeline then diffs the PR against `champions/<kernel_type>/` and, on a win, applies the
+`cco-winner-<kernel_type>` label (that orchestration is the pipeline's, not this module's).
 
 Usage:
     uv run --no-project python cco/gate.py --self-test

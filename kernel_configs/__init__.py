@@ -6,7 +6,7 @@ Scans this directory for ``*.toml`` files.  For each file the registry:
    four required callables: ``input_generator``, ``reference_fn``, ``flops_fn``,
    ``bytes_fn``.
 3. Merges everything into a single config dict whose schema matches what
-   ``tools/bench.py`` expects in ``KERNEL_CONFIGS``.
+   ``benchmark.py`` expects in ``KERNEL_CONFIGS``.
 
 Importing this module is cheap: it parses TOML, validates dtype names and
 companion-file existence, and AST-checks the companion modules, but does

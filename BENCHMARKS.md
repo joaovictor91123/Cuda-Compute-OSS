@@ -1,131 +1,77 @@
 # Benchmarks
 
-Public benchmark results for CCO. All numbers come from real GPUs running the unmodified bench harness — no simulators, no estimates.
+What the harness measures, how a submission is scored, and the current seed-champion baselines.
+All numbers come from real GPUs running the unmodified, locked harness (`benchmark.py`) — no
+simulators, no estimates.
 
-> **Status: awaiting first submissions.** Most rows below are placeholders (`_TBD_`). Filling them is a high-leverage contribution — see [#5](https://github.com/zeokin/Cuda-OSS/issues/5) for the seeding effort and [#17](https://github.com/zeokin/Cuda-OSS/issues/17) for the `rms_norm` first-contribution path. A row with no data is intentional; a row with fabricated data is a project-level integrity failure.
->
-> Submissions are gated by [#1](https://github.com/zeokin/Cuda-OSS/issues/1) (baseline kernels must ship before optimizations can be measured against them).
-
-## How to Read These Tables
-
-- **Baseline** — performance of the kernel in `kernels/<name>.py` before any agent intervention
-- **Optimized** — performance of the kernel in `kernels_optimized/<name>.py` after the agent's experiment loop has converged
-- **Speedup** — `baseline_ms / optimized_ms`
-- **% of Peak** — achieved throughput as a fraction of the GPU's roofline ceiling
-- **Iters** — number of accepted experiments (keep decisions) to reach the optimized version
-- **Cost** — agent token usage (input + output) across the full optimization run
-
-All speedups are measured at the median over 100 trials after 20 warmup iterations (Triton `do_bench` defaults). Correctness must pass the full 5-stage verification pipeline; numbers from failing kernels are not reported.
+> **The scored axis is speedup vs the current champion kernel, not vs PyTorch.** The PyTorch
+> reference in `references/` is the *correctness oracle only*. A challenger wins a track when it is
+> correct (5-stage hard gate), uses no more VRAM, and is faster than the standing champion with
+> statistical significance (one-sided Mann-Whitney U + a margin). See [DESIGN.md](DESIGN.md) §3.
 
 ---
 
-## Methodology
-
-1. Hardware is recorded by `tools/prepare.py` (GPU name, driver, CUDA version, NCU version)
-2. The bench harness ([tools/bench.py](tools/bench.py)) runs the kernel against the reference implementation defined in `references/<name>.py`
-3. The optimization loop ([tools/run_loop.py](tools/run_loop.py)) drives iterations, commits each experiment, and records lineage in `workspace/results.tsv`
-4. Final numbers are extracted from the last accepted experiment row in `results.tsv`
-5. Roofline ceilings use NVIDIA-published peak FLOPs and HBM bandwidth for the SKU
-
----
-
-## Results
-
-### rms_norm — Per-row RMS Normalization
-
-Memory-bound. Roofline ceiling dominated by HBM bandwidth.
-
-| GPU | Shape (M × N) | dtype | Baseline (ms) | Optimized (ms) | Speedup | % of Peak BW | Iters | Agent | Cost |
-|---|---|---|---|---|---|---|---|---|---|
-| _TBD_ | 4096 × 5120 | bf16 | — | — | — | — | — | — | — |
-
-### qkv_part_rope — QKV with Partial Rotary
-
-Mixed. Touches attention input pipeline.
-
-| GPU | Batch × Seq | dtype | Baseline (ms) | Optimized (ms) | Speedup | % of Peak | Iters | Agent | Cost |
-|---|---|---|---|---|---|---|---|---|---|
-| _TBD_ | 2 × 4096 | bf16 | — | — | — | — | — | — | — |
-
-### swiglu_input_quant — SwiGLU + FP8 Quantization
-
-Multi-output. BF16 SwiGLU + FP8 quantized tensor + FP32 scales.
-
-| GPU | Shape | dtype | Baseline (ms) | Optimized (ms) | Speedup | % of Peak | Iters | Agent | Cost |
-|---|---|---|---|---|---|---|---|---|---|
-| _TBD_ | — | bf16 → fp8 | — | — | — | — | — | — | — |
-
-### persistent_matmul — GEMM (C = A @ B)
-
-Compute-bound. Roofline ceiling is tensor-core throughput.
-
-| GPU | Shape (M × N × K) | dtype | Baseline (ms) | Optimized (ms) | Speedup | % of Peak FLOPs | Iters | Agent | Cost |
-|---|---|---|---|---|---|---|---|---|---|
-| _TBD_ | 4096 × 4096 × 4096 | bf16 | — | — | — | — | — | — | — |
-
-### dsa_forward — Dynamic Sparse Attention
-
-Mixed. Sparse attention with block indices, GQA-aware.
-
-| GPU | Shape | dtype | Baseline (ms) | Optimized (ms) | Speedup | % of Peak | Iters | Agent | Cost |
-|---|---|---|---|---|---|---|---|---|---|
-| _TBD_ | — | bf16 | — | — | — | — | — | — | — |
-
----
-
-## Reference Performance
-
-For context, here is the achievable peak for the supported GPUs (bf16, theoretical):
-
-| GPU | Tensor Core (TFLOPs) | HBM Bandwidth (GB/s) | Ridge Point (FLOPs/byte) |
-|---|---|---|---|
-| H100 SXM | 989 | 3350 | ~295 |
-| H800 SXM | 989 | 3350 | ~295 |
-| A100 80GB | 312 | 2039 | ~153 |
-| L40S | 362 | 864 | ~419 |
-| RTX 4090 | 330 | 1008 | ~327 |
-| RTX 3090 | 142 | 936 | ~152 |
-
-Kernels with arithmetic intensity below the ridge point are memory-bound; above it, compute-bound.
-
----
-
-## Reproducing a Result
+## How a number is produced
 
 ```bash
-# 1. Check out the commit recorded in the row you want to reproduce
-git checkout <git_sha>
-
-# 2. Activate the environment
-uv sync
-uv run tools/prepare.py
-
-# 3. Copy the optimized kernel into the active slot
-cp kernels_optimized/<name>.py kernel.py
-
-# 4. Re-run the bench harness
-uv run tools/bench.py
+uv run benchmark.py            # 5-stage correctness + roofline on the published self-score seed (42)
+uv run benchmark.py --score    # the competition latency SAMPLE (n_blocks block-means) on the primary size
+uv run benchmark.py --blob     # the bound score blob (sample + correctness + identity hashes)
 ```
 
-Numbers should match within ±2% on the same GPU SKU and driver version. Larger variance usually means a thermal / clock difference — re-run after a `nvidia-smi -q -d CLOCK` check.
+- **Latency sample:** `n_blocks = 30` block-mean latencies on the primary size + dtype, with
+  rotating input buffers (kills warm-L2 / memoize-by-pointer), fused correctness on two distinct
+  buffers, and an output-vs-input alias guard (`run_scored_sample`).
+- **Win decision** (`cco/significance.py`): the challenger beats the champion only if it is
+  *significantly* faster (`p < p_value_threshold`) **and** faster by ≥ `min_improvement_pct` — both
+  thresholds live in [cco.config.json](cco.config.json) (`scoring.significance`).
+- **Roofline** `pct_peak_*` is *reported-only* — informative, never part of the score (it can't be,
+  since the score is champion-relative).
 
 ---
 
-## Submitting Your Numbers
+## Seed-champion baselines
 
-Run a full optimization loop on your hardware and open a PR adding a row to the relevant table. Include:
+The seed champions (`champions/<track>/kernel.py`) are the bar each track opens with. The figures
+below were measured on the **CCO dev box — NVIDIA RTX 5070 Ti (sm_120 Blackwell), torch 2.8.0+cu128,
+triton 3.4.0** via WSL2. **This is the development box, not the canonical SKU** (the canonical GPU is
+the pinned SKU used for the scored canonical rerun); treat these as reference, not as the
+competition leaderboard. The live leaderboard is the set of `cco-winner-<track>` labels on merged
+PRs once the competition is wired.
 
-- The exact GPU model and driver version (`nvidia-smi`)
-- The CUDA toolkit version (`nvcc --version`)
-- The git SHA of the final accepted experiment
-- A link to your `workspace/results.tsv` (attach as a file in the PR)
-- The agent + model used (e.g., "Claude Opus 4.7", "Codex GPT-5")
-- Total token cost if you tracked it
+| Track | Primary size / dtype | Seed-champion baseline (dev box) | Regime |
+|---|---|---|---|
+| `rms_norm` | 4096×4096, bf16/fp16 | correctness PASS; ~9.6× vs eager PyTorch; ~80% peak BW | memory-bound |
+| `matmul` | 2048³, fp16 (fp32 is correctness-only) | PASS; ~91 TFLOPS ≈ 99% cuBLAS | compute-bound |
+| `qkv_part_rope` | b2×s4096, bf16 | PASS; ~9.7× vs eager | memory-bound |
+| `swiglu_input_quant` | 4096×7168, bf16→fp8 (multi-output) | PASS; ~29.8× vs eager | memory-bound |
+| `dsa_forward` | b4×s2048, bf16 (multi-output) | PASS; ~101 TFLOPS, ~18× vs the dense reference | compute-bound |
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#submitting-benchmark-results) for the full template.
+"vs eager / vs reference" here is the seed champion's headroom over naive PyTorch and is shown only
+to characterize each track — **it is not the competition axis.** What miners are scored on is
+beating the *current champion* in the table above (which advances as PRs win).
 
 ---
 
-## Notes on Honesty
+## Reproducing a baseline
 
-We report what we can reproduce. Speedups are measured against the in-repo baseline, not against cuBLAS or vendor-tuned libraries. Where a kernel is already at >90% of peak, the headroom is small and "speedup" numbers will be modest — that is the truthful answer, not a failure of the system.
+```bash
+# On a CUDA+Triton machine (Linux, or WSL2 on Windows):
+cp champions/<track>/kernel.py kernel.py     # put the champion in the scored slot
+uv run benchmark.py                          # self-score (seed 42) -> correctness + latency
+uv run benchmark.py --blob                   # the full bound blob, incl. identity hashes
+```
+
+Numbers should match within ±2% on the same GPU SKU and driver. Larger variance usually means a
+thermal / clock difference — lock clocks (`nvidia-smi -lgc/-lmc`) and re-run. On a different SKU the
+absolute latencies differ; that is expected and is why a speedup is only compared champion-vs-
+challenger on **one** pinned SKU within a single sealed job.
+
+---
+
+## Notes on honesty
+
+We report what the locked harness reproduces. Speedups are measured against the in-repo champion,
+never against cuBLAS or a vendor library (for `matmul` the PyTorch reference *is* cuBLAS, so it is
+used for correctness only — beating it isn't the game; beating the standing Triton champion is). A
+row with no data is intentional; a row with fabricated data is a project-level integrity failure.

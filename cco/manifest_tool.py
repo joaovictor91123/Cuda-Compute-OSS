@@ -1,7 +1,7 @@
 """
 cco/manifest_tool.py — Gate-2 file-integrity for CCO competition submissions (Step 3).
 
-Gate 2 of the OC protocol pins every LOCKED file so that, at a PR HEAD, only the single
+Gate 2 pins every LOCKED file so that, at a PR HEAD, only the single
 mutable artifact (`kernel.py`) may differ from the canonical tree. This module generates and
 verifies `manifest.json`.
 
@@ -16,11 +16,11 @@ locked path:
 
 Only the artifact (`kernel.py`) is excluded from the manifest and allowed to differ.
 
-`manifest.json` is authoritative on `main` (per the OC rule "manifest authority lives on
-main"): verify() reads the locked-path set and hashes FROM the manifest, not from the PR's
-copy, so a miner editing their own manifest changes nothing. (Complementary check, owned by
-the maintainer agent's Gate 2: assert the PR's git diff touches ONLY `kernel.py` — that also
-catches a stray top-level file like `sitecustomize.py` outside any locked path.)
+`manifest.json` is authoritative on `main` (manifest authority lives on main): verify() reads
+the locked-path set and hashes FROM the manifest, not from the PR's copy, so a miner editing
+their own manifest changes nothing. (Complementary check in the gate pipeline's Gate 2: assert
+the PR's git diff touches ONLY `kernel.py` — that also catches a stray top-level file like
+`sitecustomize.py` outside any locked path.)
 
 Usage:
     uv run --no-project python cco/manifest_tool.py --self-test
@@ -40,7 +40,7 @@ MANIFEST_VERSION = 1
 DEFAULT_ARTIFACT = "kernel.py"
 
 # Competition locked roots (files + dirs). Non-existent entries are skipped at generate time;
-# the canonical set is finalized in cco.config.json (Step 12) once the OC layout lands.
+# the canonical set is finalized in cco.config.json (the locked_paths list).
 DEFAULT_LOCKED_PATHS = [
     "tools", "references", "kernel_configs", "cco", "champions",
     "runtime", "cco.config.json", "payload-schema.json", "pyproject.toml",

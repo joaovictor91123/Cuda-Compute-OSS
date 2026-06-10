@@ -10,22 +10,22 @@ miner-facing rules see [CONTRIBUTING.md](CONTRIBUTING.md).
 The single most important design decision: **the runtime is fixed and shared; the submission is the
 only variable, and it is fed in.**
 
-- **Locked (byte-verified at every PR HEAD against `manifest.json`):** the harness `bench.py`, the
+- **Locked (byte-verified at every PR HEAD against `manifest.json`):** the harness `benchmark.py`, the
   correctness oracles `references/`, the benchmark spec + input generation `kernel_configs/`, the
   per-track champions `champions/`, the enforcement code `cco/`, the config, and the runtime image.
 - **Variable:** exactly one file, `kernel.py` (`KERNEL_TYPE` + `kernel_fn`), bound by `kernel_sha256`.
 - **Per-PR secret:** the input seed = a function of the PR HEAD SHA (`cco/seed.py`), unknowable to
   the miner in advance.
 
-The maintainer agent ("Peggy") and its wrapper are owned by the subnet's `agentic-maintainer` repo,
-**not** here. This repo ships only the locked substrate + per-repo config/state.
+The automated gate pipeline runs off-repo against this locked substrate; this repo ships only the
+substrate + the per-repo config/state it reads.
 
 ## 2. The gate walk (default verdict = reject)
 
-A PR merges only on affirmative evidence. The agent short-circuits on the first failure:
+A PR merges only on affirmative evidence. The gate pipeline short-circuits on the first failure:
 
 1. **Parse** — the fenced JSON payload against `payload-schema.json`; malformed → reject.
-2. **Gate 1 — identity** — GitHub ↔ hotkey (das-gittensor) ↔ hotkey on the SN74 metagraph ↔ payload
+2. **Gate 1 — identity** — GitHub ↔ hotkey ↔ hotkey on the SN74 metagraph ↔ payload
    signature verifies under the hotkey.
 3. **Gate 2 — manifest integrity** — re-hash every path in `main:manifest.json` at the PR HEAD; only
    `kernel.py` may differ, and **no unlisted file may be added** to a locked directory
@@ -44,7 +44,7 @@ it. This removes the "pass clean, then push a backdoor before merge" window.
 
 ## 3. Scoring
 
-**Correctness is a hard gate, never an axis.** All 5 `bench.py` stages must PASS against the locked
+**Correctness is a hard gate, never an axis.** All 5 `benchmark.py` stages must PASS against the locked
 oracle at the locked tolerances: smoke, shape sweep, numerical stability, **within-tolerance**
 determinism (admits correct atomics/split-K kernels — not bitwise), edge cases. Speed never buys
 back correctness.
@@ -65,7 +65,7 @@ properties are baked into the timing:
   buffer-1 ("fast garbage at the scored size");
 - an **output-vs-input alias guard** — a kernel returning a view of its input is rejected.
 
-**The win decision** (`cco/significance.py`, run by the maintainer agent): a one-sided
+**The win decision** (`cco/significance.py`, run by the gate pipeline): a one-sided
 **Mann-Whitney U** test on the two latency samples — nonparametric, so it's robust to the bimodal
 GPU clock-boost that makes a Welch t-test misfire — **plus** an effect-size margin. A challenger
 wins only if it is *significantly* faster **and** faster by ≥ `min_improvement_pct`. This rejects
@@ -78,7 +78,7 @@ the magnitude of a win doesn't change pay — you're rewarded for *taking and ho
 
 ## 4. The bound score blob
 
-`bench.py --blob` emits a sorted-keys JSON blob (`cco/blob.py`) that *proves what produced a score*:
+`benchmark.py --blob` emits a sorted-keys JSON blob (`cco/blob.py`) that *proves what produced a score*:
 the latency sample + correctness verdict, plus `input_seed`, `kernel_sha256` (the artifact),
 `reference_hash` (oracle + config — so a score can't be computed against a weaker/edited oracle),
 `harness_self_hash` (the scorer's own source), the GPU/SKU, and `blob_sha256` over all of it. Under
@@ -100,23 +100,21 @@ integrity hash tying a score to its evidence. The harness makes no keep/revert d
 | Return a view of the input (no compute) | output-vs-input alias guard | no |
 | Pass intermittently / race conditions | within-tolerance determinism + multi-buffer correctness; gross races fail smoke/sweep | rare 1-in-10⁶ faults policed post-merge |
 | Approximate/degraded output under loose tolerance | per-track locked tolerances (tightened; e.g. swiglu 0.5 → 0.01/0.2) | tolerance is a benchmark-validity knob; per-output tolerances are a noted refinement |
-| Self-report a fake score | the maintainer runs it; the blob is bound (`blob_sha256`) | no |
+| Self-report a fake score | the canonical rerun runs it; the blob is bound (`blob_sha256`) | no |
 | Win on a faster GPU | the SKU is pinned + part of the locked "model" (a swap is a vN reset) | requires attested SKU for full strength (§6) |
 
 ## 6. Attestation (v1 vs v2)
 
-A kernel competition needs a **GPU** under confidential compute — OC-0/OC-1's CPU-only TDX does not
-apply.
-- **v1 (current posture):** the canonical rerun runs on a **trusted maintainer GPU box**, egress
-  closed, clocks locked, exclusive GPU. This closes the cheating surface (the maintainer runs the
-  PR's code); it defers third-party *auditability*.
-- **v2:** route the rerun through GPU-attested confidential compute (Polaris GPU-TEE / Phala /
-  Azure) so the published image lands in MRTD and `blob_sha256` binds into the quote — then anyone
-  can verify the maintainer reran honestly. This is the make-or-break subnet-side dependency.
+A kernel competition needs a **GPU** under confidential compute, so a CPU-only TEE does not apply.
+- **v1 (current posture):** the canonical rerun runs on a **trusted, pinned GPU host**, egress
+  closed, clocks locked, exclusive GPU. This closes the cheating surface (CCO runs the PR's code
+  itself); it defers third-party *auditability*.
+- **v2:** route the rerun through GPU-attested confidential compute (a GPU TEE) so the published
+  image lands in MRTD and `blob_sha256` binds into the quote — then anyone can verify the rerun was
+  honest. This is the make-or-break infrastructure dependency.
 
 ## 7. What's intentionally not here
 
-The original CCO agent/KB apparatus (the `program.md` loop, `CUDA_OPTIMIZATION.md`, `memory/`
-Reflexion logs, `run_loop.py` keep/revert, `visualize.py`) is the *inverse* shape of an objective
-competition and is removed: the miner is an external party submitting one artifact to a frozen
-harness, not an in-repo agent growing a knowledge base.
+There is no in-repo optimization agent or knowledge base. CCO ships only the locked substrate and
+the single mutable `kernel.py`: the optimization intelligence is the external contributors, each
+submitting one artifact to a frozen, objective harness.

@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 # Without this, `uv run`/`uv sync` fail with "Unable to determine which files to
 # ship inside the wheel" on every platform.
 [tool.hatch.build.targets.wheel]
-packages = ["cco", "kernel_configs", "kernels", "references", "tools"]
+packages = ["cco", "kernel_configs", "references"]
 
 [tool.ruff]
 line-length = 120

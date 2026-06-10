@@ -3,13 +3,13 @@ cco/seed.py — derive the per-PR input seed for the canonical rerun (Step 4).
 
 Anti-overfit mechanism. Instead of a fixed `seed=42`, the canonical rerun seeds input generation
 from the **PR HEAD SHA**, which the miner cannot predict (they don't know their own future commit
-hash, and the rerun is maintainer-driven). A kernel that memorizes/hardcodes outputs for known
+hash, and the rerun is driven by the gate pipeline). A kernel that memorizes/hardcodes outputs for known
 inputs then fails correctness, because the oracle re-derives the expected output on the same
 unpredictable inputs. Self-scoring uses the published fixed seed (SELF_SCORE_SEED) so miners can
 iterate locally; only the canonical rerun uses the PR-HEAD seed.
 
 benchmark.py takes the seed as an integer (`--seed`); this module derives that integer from a SHA
-on the maintainer side. The whole 5-stage run is threaded with one base seed — every
+on the gate-pipeline side. The whole 5-stage run is threaded with one base seed — every
 `input_generator` call site uses it, so no path is left at the fixed 42 (which would otherwise
 allow partial memorization of that path's inputs).
 

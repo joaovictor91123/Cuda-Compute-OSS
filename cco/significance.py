@@ -12,7 +12,7 @@ it only assumes the samples are comparable — so bimodal boost doesn't break it
 the per-block median latencies that benchmark.py emits (champion and challenger re-run fresh and
 interleaved in the same sealed job, so they share thermal state).
 
-This decision is owned by the maintainer agent (it consumes two score blobs); benchmark.py only
+This decision is made by the gate pipeline (it consumes two score blobs); benchmark.py only
 produces samples and never decides. Pure stdlib (math/statistics) — no scipy/numpy dependency.
 
 Usage:

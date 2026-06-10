@@ -1,7 +1,7 @@
 """
 cco/blob.py — assemble the bound score blob (Step 9).
 
-The canonical artifact the maintainer agent verifies. It bundles the scored latency sample + the
+The canonical artifact the gate pipeline verifies. It bundles the scored latency sample + the
 correctness verdict with binding/identity hashes, so a score PROVES what produced it:
 
   * harness_self_hash — the harness source (benchmark.py + cco/*.py): which scorer ran;
@@ -13,8 +13,8 @@ correctness verdict with binding/identity hashes, so a score PROVES what produce
 
 `blob_sha256` is sha256 over all the other fields — the value that gets bound into the TDX/
 attestation quote (or, in the v1 trusted-box posture, the integrity hash that ties the score to
-its evidence). The harness makes NO keep/revert decision; the blob is just evidence the maintainer
-agent checks before comparing challenger-vs-champion.
+its evidence). The harness makes NO keep/revert decision; the blob is just evidence the gate
+pipeline checks before comparing challenger-vs-champion.
 
 Usage: uv run --no-project python cco/blob.py --self-test
 """
@@ -120,7 +120,7 @@ def _self_test() -> int:
                 f.write(content)
             return p
 
-        harness = w("tools/bench.py", "# harness v1\n")
+        harness = w("benchmark.py", "# harness v1\n")
         w("cco/guard_kernel.py", "# guard\n")
         w("references/__init__.py", "")
         w("references/matmul.py", "def matmul_ref(): pass\n")
