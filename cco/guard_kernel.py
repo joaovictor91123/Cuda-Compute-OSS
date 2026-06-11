@@ -84,6 +84,7 @@ DENY_BUILTINS = frozenset({
 DENY_IMPORT_MODULES = frozenset({
     "importlib", "ctypes", "cffi", "subprocess", "pickle", "marshal",
     "socket", "urllib", "requests", "http", "cupy",
+    "os", "sys", "builtins", "io",  # process/fs/introspection escapes (os.system, sys.argv, ...)
 })
 
 # Module-level names the artifact must NOT define (the LOCKED config owns these).

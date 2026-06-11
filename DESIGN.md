@@ -88,6 +88,20 @@ the latency sample + correctness verdict, plus `input_seed`, `kernel_sha256` (th
 attestation (§6) `blob_sha256` is bound into the quote; in the v1 trusted-box posture it's the
 integrity hash tying a score to its evidence. The harness makes no keep/revert decision.
 
+**Isolation.** The authoritative scored run executes `kernel.py` in a **separate subprocess**
+(`cco/isolate.py`). A kernel that shared the scorer's interpreter could otherwise read the secret
+seed from `sys.argv`, monkeypatch `torch.allclose` / the timing events, or neuter the no-delegation
+trap — no in-process guard can stop code that runs *inside* the interpreter. So the parent generates
+the inputs from the secret seed (which **never enters the child**) and judges correctness with **its
+own** oracle against the outputs the child returns — validating distinct buffers drawn both *before
+and after* the timed window, so a correct-then-garbage call-counter has no safe window. The child is
+launched with `-E` and a clean working directory (no `sitecustomize` / `PYTHON*` injection), and its
+output is deserialized tensor-only (`weights_only=True`) so it cannot pickle-RCE the parent. The
+in-child dispatch trap is defense-in-depth; the load-bearing check is the parent's oracle. *Residual:*
+a genuinely-correct kernel under-reporting its own CUDA-event timing is bounded by a parent
+wall-clock tripwire (a claim faster than wall-clock is rejected); full timing-forge immunity needs
+parent-driven two-point wall-clock timing, a planned follow-up.
+
 ## 5. Threat model — what's gameable, and what closes it
 
 | Attack | Closed by | Residual? |
@@ -96,14 +110,17 @@ integrity hash tying a score to its evidence. The harness makes no keep/revert d
 | Inject a new file into a locked dir (auto-import RCE) | Gate 2 full-directory-listing pin | no |
 | Delegate to `torch.matmul` / `F.*` / `@` / cuBLAS | static AST guard (Gate 3) **+** runtime dispatch trap (Gate 4) | hand-rolled MMA vs "morally cuBLAS" is a policy line; Triton-only v1 shrinks it |
 | Inline CUDA-C escape | banned in v1 (guard rejects `cpp_extension`) | n/a in v1 |
-| Memorize / hardcode outputs for known inputs | PR-HEAD-seeded inputs; oracle re-derives truth | no (seed unknowable) |
-| Cache first answer, return it always | fused correctness on 2 distinct buffers | no |
-| Fast garbage only at the scored size | fused correctness on the scored inputs | no |
+| Memorize / hardcode outputs for known inputs | PR-HEAD-seeded inputs the kernel **never sees** (process isolation); oracle re-derives truth | no |
+| Cache first answer, return it always | parent-validates distinct buffers before + after timing | no |
+| Fast garbage only at the scored size | parent-validates the scored-size outputs against its oracle | no |
 | Win via warm-L2 residency | rotating input buffers across reps | reduced; canonical box also locks clocks |
-| Return a view of the input (no compute) | output-vs-input alias guard | no |
+| Return a view of the input (no compute) | parent-side oracle validation (an unchanged input fails the oracle) | no |
+| In-process score forgery (patch the comparison/timing, read the seed from `argv`) | the kernel runs **isolated** in a subprocess; the parent judges correctness with its own oracle and bounds timing by wall-clock (§4) | timing under-report (bounded) |
+| Pickle-RCE the scorer from the subprocess | child output loaded `weights_only=True` (tensors only) | no |
+| `os.system` / `import sys` / sitecustomize escape | static import ban (`os`/`sys`/`builtins`/`io`) + child `-E` + clean cwd | no for the verdict |
+| OOM-dodge a locked size | OOM on a correctness size is a **FAIL**, not a skip | no |
 | Pass intermittently / race conditions | within-tolerance determinism + multi-buffer correctness; gross races fail smoke/sweep | rare 1-in-10⁶ faults policed post-merge |
 | Approximate/degraded output under loose tolerance | per-track locked tolerances (tightened; e.g. swiglu 0.5 → 0.01/0.2) | tolerance is a benchmark-validity knob; per-output tolerances are a noted refinement |
-| Self-report a fake score | the canonical rerun runs it; the blob is bound (`blob_sha256`) | no |
 | Win on a faster GPU | the SKU is pinned + part of the locked "model" (a swap is a vN reset) | requires attested SKU for full strength (§6) |
 
 ## 6. Attestation (v1 vs v2)

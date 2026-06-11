@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import importlib.util
 import json
 import os
 import signal
@@ -444,7 +445,13 @@ def run_correctness(kernel_fn: Callable, config: dict, quick: bool = False, seed
                     )
 
             except torch.cuda.OutOfMemoryError:
-                print(f"  SKIP: {label} {dtype} -> OOM")
+                # OOM on a locked correctness size is a FAIL, not a SKIP: the canonical rerun runs on
+                # the pinned GPU, and a kernel must handle every locked size there. SKIP would let a
+                # kernel dodge sizes it can't compute correctly.
+                sweep_pass = False
+                sweep_fail_count += 1
+                details.append(f"  sweep {label}/{dtype}: OOM (must fit the canonical GPU)")
+                print(f"  FAIL: {label} {dtype} -> OOM")
                 torch.cuda.empty_cache()
                 continue
             except BenchTimeoutError:
@@ -856,7 +863,11 @@ def _tensor_storage_ptrs(x) -> set:
 def run_scored_sample(kernel_fn: Callable, config: dict, seed: int = 42,
                       n_blocks: int = 30, warmup: int = 25, rep: int = 100,
                       n_buffers: int = 4) -> dict:
-    """Competition scoring measurement (Step 7).
+    """Competition scoring measurement (Step 7) — IN-PROCESS fallback.
+
+    NOTE: the AUTHORITATIVE scored sample runs ISOLATED via cco/isolate.run_isolated (called from
+    main). This in-process path is only a fallback for a kernel with no file; its timing/correctness
+    are forgeable by a kernel sharing this interpreter, so it is NOT authoritative.
 
     Emits a SAMPLE of per-call latencies on the primary (scored) size + dtype for the
     challenger-vs-champion significance test (cco/significance.py). Anti-cheat properties baked in:
@@ -1034,43 +1045,39 @@ def main():
     print("CCO Benchmark Harness")
     print("=" * 60)
 
+    authoritative = bool(args.score or args.blob)
     kernel_module = None
     kernel_fn = None
     kernel_type = args.kernel
 
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
+
+    # Locate kernel.py WITHOUT executing it (find_spec does not run module code). On the AUTHORITATIVE
+    # (--score/--blob) path the submission is NEVER imported into this interpreter — importing it would
+    # let the kernel monkeypatch the scorer (torch.allclose, the timing events, the trap) at import
+    # time, before the isolated run can validate. It is imported in-process ONLY for the dev path.
     try:
-        repo_root = os.path.dirname(os.path.abspath(__file__))
-        if repo_root not in sys.path:
-            sys.path.insert(0, repo_root)
-        if os.getcwd() not in sys.path:
-            sys.path.insert(0, os.getcwd())
+        _spec = importlib.util.find_spec("kernel")
+        kernel_path = _spec.origin if _spec else None
+    except Exception:
+        kernel_path = None
+    if not kernel_path or not os.path.isfile(kernel_path):
+        print("\nERROR: cannot locate kernel.py")
+        print("\ncorrectness: FAIL")
+        print("throughput_tflops: 0.000")
+        sys.exit(1)
 
-        kernel_module = importlib.import_module("kernel")
-        kernel_fn = kernel_module.kernel_fn
-
+    if kernel_type is None:
+        from cco.guard_kernel import extract_kernel_type
+        with open(kernel_path, "rb") as _f:
+            kernel_type = extract_kernel_type(_f.read().decode("utf-8", "replace"))
         if kernel_type is None:
-            kernel_type = getattr(kernel_module, "KERNEL_TYPE", None)
-            if kernel_type is None:
-                print("ERROR: kernel.py has no KERNEL_TYPE attribute and --kernel not specified")
-                sys.exit(1)
-
-        print(f"kernel_type: {kernel_type}")
-        print("kernel_module: kernel.py loaded successfully")
-
-    except SyntaxError as e:
-        print("\nERROR: kernel.py has a syntax error:")
-        print(f"  {e}")
-        traceback.print_exc()
-        print("\ncorrectness: FAIL")
-        print("throughput_tflops: 0.000")
-        sys.exit(1)
-    except Exception as e:
-        print("\nERROR: Failed to import kernel.py:")
-        print(f"  {type(e).__name__}: {e}")
-        traceback.print_exc()
-        print("\ncorrectness: FAIL")
-        print("throughput_tflops: 0.000")
-        sys.exit(1)
+            print("ERROR: kernel.py has no KERNEL_TYPE attribute and --kernel not specified")
+            sys.exit(1)
 
     if kernel_type not in KERNEL_CONFIGS:
         print(f"\nERROR: Unknown kernel type '{kernel_type}'")
@@ -1080,6 +1087,25 @@ def main():
         sys.exit(1)
 
     config = KERNEL_CONFIGS[kernel_type]
+    print(f"kernel_type: {kernel_type}")
+
+    if not authoritative:
+        # Dev path only: import + run the kernel in THIS process (forgeable; for local iteration).
+        try:
+            kernel_module = importlib.import_module("kernel")
+            kernel_fn = kernel_module.kernel_fn
+        except SyntaxError as e:
+            print(f"\nERROR: kernel.py has a syntax error:\n  {e}")
+            traceback.print_exc()
+            print("\ncorrectness: FAIL")
+            print("throughput_tflops: 0.000")
+            sys.exit(1)
+        except Exception as e:
+            print(f"\nERROR: Failed to import kernel.py:\n  {type(e).__name__}: {e}")
+            traceback.print_exc()
+            print("\ncorrectness: FAIL")
+            print("throughput_tflops: 0.000")
+            sys.exit(1)
 
     # ------------------------------------------------------------------
     # GPU Detection
@@ -1098,16 +1124,33 @@ def main():
     print(f"gpu_compute_capability: {gpu.compute_capability[0]}.{gpu.compute_capability[1]}")
 
     # ------------------------------------------------------------------
-    # Correctness
+    # Authoritative scoring (isolated) OR dev-path correctness (in-process)
     # ------------------------------------------------------------------
-    print("\n=== CORRECTNESS ===")
-    try:
-        correctness_results = run_correctness(kernel_fn, config, quick=args.quick, seed=args.seed)
-    except Exception as e:
-        print(f"\nFATAL: Correctness testing crashed: {type(e).__name__}: {e}")
-        traceback.print_exc()
-        correctness_results = {"correctness": "FAIL", "smoke_test": "CRASH", "shape_sweep": "CRASH",
-                               "numerical_stability": "CRASH", "determinism": "CRASH", "edge_cases": "CRASH"}
+    score_sample = None
+    if authoritative:
+        # The kernel runs ONLY in the isolated subprocess; correctness is judged here, against our
+        # oracle, on outputs the child returns. This interpreter never imported the submission.
+        print("\n=== SCORING (isolated subprocess) ===")
+        try:
+            from cco.isolate import run_isolated
+            score_sample = run_isolated(kernel_path, config, args.seed, _do_compare)
+        except Exception as e:
+            print(f"score_error: {type(e).__name__}: {e}")
+            traceback.print_exc()
+        if score_sample and score_sample.get("error"):
+            print(f"score_error: {score_sample['error']}")
+        _v = "PASS" if (score_sample and score_sample.get("correct")) else "FAIL"
+        correctness_results = {"correctness": _v, "smoke_test": _v, "shape_sweep": "SKIP",
+                               "numerical_stability": "SKIP", "determinism": "SKIP", "edge_cases": "SKIP"}
+    else:
+        print("\n=== CORRECTNESS ===")
+        try:
+            correctness_results = run_correctness(kernel_fn, config, quick=args.quick, seed=args.seed)
+        except Exception as e:
+            print(f"\nFATAL: Correctness testing crashed: {type(e).__name__}: {e}")
+            traceback.print_exc()
+            correctness_results = {"correctness": "FAIL", "smoke_test": "CRASH", "shape_sweep": "CRASH",
+                                   "numerical_stability": "CRASH", "determinism": "CRASH", "edge_cases": "CRASH"}
 
     print("\n--- Correctness Summary ---")
     print(f"smoke_test: {correctness_results.get('smoke_test', 'N/A')}")
@@ -1134,18 +1177,21 @@ def main():
     _size_params = ", ".join(f"{k}={v}" for k, v in _perf_primary_size.items())
     print(f"\n=== PERFORMANCE ({_perf_primary_label}: {_size_params}, dtype={_perf_dtype}) ===")
 
+    # Roofline/speedup-vs-pytorch are REPORTED-ONLY (never scored) and need the kernel in-process, so
+    # they run on the dev path only. The authoritative latency is the isolated --score sample.
     perf_results = {"primary": None, "all": []}
     peak_vram_mb = 0.0
-    try:
-        sizes_filter = args.sizes
-        if args.quick:
-            sizes_filter = "large"
-        torch.cuda.reset_peak_memory_stats()
-        perf_results = run_performance(kernel_fn, config, gpu, sizes_filter=sizes_filter, seed=args.seed)
-        peak_vram_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
-    except Exception as e:
-        print(f"\nFATAL: Performance benchmarking crashed: {type(e).__name__}: {e}")
-        traceback.print_exc()
+    if not authoritative:
+        try:
+            sizes_filter = args.sizes
+            if args.quick:
+                sizes_filter = "large"
+            torch.cuda.reset_peak_memory_stats()
+            perf_results = run_performance(kernel_fn, config, gpu, sizes_filter=sizes_filter, seed=args.seed)
+            peak_vram_mb = torch.cuda.max_memory_allocated() / 1024 / 1024
+        except Exception as e:
+            print(f"\nFATAL: Performance benchmarking crashed: {type(e).__name__}: {e}")
+            traceback.print_exc()
 
     primary = perf_results.get("primary")
     if primary is not None:
@@ -1201,34 +1247,28 @@ def main():
                   f"{entry['throughput_tflops']:>10.3f} {entry['pct_peak_compute']:>7.1f}%")
 
     # ------------------------------------------------------------------
-    # Scored sample (competition; --score / --blob)
+    # Scored sample print (--score). The sample was produced ISOLATED, above.
     # ------------------------------------------------------------------
-    score_sample = None
-    if args.score or args.blob:
-        try:
-            score_sample = run_scored_sample(kernel_fn, config, seed=args.seed)
-        except Exception as e:
-            print(f"score_error: {type(e).__name__}: {e}")
-            traceback.print_exc()
-        if args.score and score_sample is not None:
-            sc = score_sample
-            print("\n=== SCORE ===")
-            print(f"score_size: {sc['size_label']}")
-            print(f"score_dtype: {sc['dtype']}")
-            print(f"score_correct: {sc['correct']}")
-            print(f"score_delegation: {sc.get('delegation')}")
-            print(f"score_output_aliased_input: {sc['output_aliased_input']}")
-            print(f"score_max_abs_error: {sc['max_abs_error']:.6e}")
-            print(f"score_median_us: {sc['median_us']:.4f}")
-            print(f"score_mean_us: {sc['mean_us']:.4f}")
-            print(f"score_stdev_us: {sc['stdev_us']:.4f}")
-            print(f"score_n_blocks: {sc['n_blocks']}")
-            print(f"score_latencies_us: {','.join(f'{x:.4f}' for x in sc['latencies_us'])}")
+    if args.score and score_sample is not None:
+        sc = score_sample
+        print("\n=== SCORE ===")
+        print(f"score_size: {sc['size_label']}")
+        print(f"score_dtype: {sc['dtype']}")
+        print(f"score_isolated: {sc.get('isolated')}")
+        print(f"score_correct: {sc['correct']}")
+        print(f"score_delegation: {sc.get('delegation')}")
+        print(f"score_output_aliased_input: {sc['output_aliased_input']}")
+        print(f"score_max_abs_error: {sc['max_abs_error']:.6e}")
+        print(f"score_median_us: {sc['median_us']:.4f}")
+        print(f"score_mean_us: {sc['mean_us']:.4f}")
+        print(f"score_stdev_us: {sc['stdev_us']:.4f}")
+        print(f"score_n_blocks: {sc['n_blocks']}")
+        print(f"score_latencies_us: {','.join(f'{x:.4f}' for x in sc['latencies_us'])}")
 
     # ------------------------------------------------------------------
     # Profiling (optional)
     # ------------------------------------------------------------------
-    if args.profile:
+    if args.profile and kernel_fn is not None:  # dev-path only (needs the kernel in-process)
         try:
             run_profile(kernel_fn, config, seed=args.seed)
         except Exception as e:
@@ -1288,7 +1328,7 @@ def main():
             competition="CCO", version=1, kernel_type=kernel_type, seed=args.seed,
             correctness=correctness_blob, scored=scored_blob, gpu=gpu_blob,
             repo_root=repo_root, harness_path=os.path.abspath(__file__),
-            kernel_path=getattr(kernel_module, "__file__", None),
+            kernel_path=kernel_path,
         )
         print("\n=== SCORE BLOB ===")
         print(json.dumps(blob, sort_keys=True, indent=2))
