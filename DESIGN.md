@@ -103,38 +103,44 @@ and post-validation — so there is no untrapped phase in which a kernel could d
 *anywhere* in that window is caught. The static guard's denylist is kept aligned with the runtime
 trap's, and a submission may not import the `cco` package (so it cannot reach the trap internals).
 Timing primitives (`torch.cuda.Event` / `synchronize` / `perf_counter`) are captured as child-locals
-**before** the submission is loaded, so a kernel that monkeypatches them at import cannot forge its
-timing. *Residual:* a genuinely-correct kernel under-reporting its own CUDA-event timing via
-side-stream tricks is bounded by a captured-clock wall anchor on the sample's scale (events
-implausibly faster than the wall are rejected); full timing-forge immunity needs parent-driven
-two-point wall-clock timing, a planned follow-up.
+**before** the submission loads, and the kernel runs in a **separate worker thread** that cannot reach
+them (no `time` import, no cross-thread frame-walk, no `gc` reach), so it cannot patch its own clock. The
+**primary latency is the per-block synced captured-clock WALL** — `perf_counter` around each block, which
+ends in a full-device `synchronize` — NOT the default-stream CUDA events: the sync makes the wall count
+any work a kernel moves *off* the default stream, so a side-stream / split-K kernel that under-reports
+its events gains nothing — the wall is the score and stays honest. The CUDA events are kept only as a
+sanity bound (a subset of the wall; they cannot exceed it), and the absolute roofline floor is checked
+against the GPU-only event time. *Residual:* the wall is measured by the (kernel-unpatchable, thread-
+isolated) child clock; moving the measurement to a parent-clock interactive RPC is a documented v2
+hardening, with low marginal value since the design already relies on thread isolation for the in-child
+probe schedule.
 
-**Timed-loop integrity.** The timed loop runs on a separate buffer set whose input is mutated by one
-element before every call, so a kernel that memoizes by pointer must return a now-stale output and a
-kernel that memoizes by content must recompute (honest timing). A sample of timed calls has its
-`(input, output)` captured and oracle-checked — and the sampled positions are drawn from **server-side
-entropy chosen at scoring time** (not the PR-HEAD seed, which the miner can recompute; not a
-closed-form schedule), spread across **all** blocks so they overlap the median-feeding calls. Keeping
-the schedule **unreadable** to the kernel — which shares the scorer's interpreter — is the load-bearing
-requirement. The probe state lives in the timed loop's frame; reaching it from the kernel needs a walk
-up the call stack (`f_back`), and *every* way to name a frame attribute is closed: the literal names
-(`__traceback__` / `tb_frame` / `f_back` / `f_locals` / `gi_frame` / `__code__` / `__closure__` …) are
-banned attributes, and the *string-keyed* routes that defeat a literal-name scan — `getattr`, the
-`operator` module (`attrgetter`/`methodcaller`, so `operator` is not importable), and `str.format`
-field access — are banned too, which makes frame-walking inexpressible rather than merely named. The job
-file is also deleted before the kernel loads (`open` is banned), the kernel is invoked through a
-module-level trampoline, and the CUDA allocator readout (`torch.cuda.memory_*`) is banned so the extra
-buffer cloned at a probed call leaks nothing. A schedule-aware kernel therefore cannot do real work only
-where it is observed: it must be correct on **every** timed call or risk the probe. An **absolute
-roofline floor** (`max(bytes/peak_bw, flops/peak_flops)`) plus a coarse captured-clock wall anchor (event
-median ≥ 0.5× the per-iter wall — a real side-stream offload drives that ratio toward zero, while honest
-kernels sit near 1.0, so the threshold stays below the honest noise floor to never false-reject) reject
-any physically-impossible or grossly side-stream-under-reported median;
-creating CUDA streams/events/graphs (the side-stream channel) is itself statically banned. The static
-guard is **re-run inside the scoring subprocess on the exact bytes about to execute**, so none of these
-bans can be skipped by reaching the timed run unscanned. Together these close memoize-and-replay
-(including the padded variant), the predictable-probe-schedule evasion, and the frame-introspection
-schedule leak (literal *and* string-keyed).
+**Timed-loop integrity.** The timed loop mutates one element of **every float input** before each call
+(via a tiny Triton store, not a trapped torch op), so a kernel that memoizes by pointer returns a
+now-stale output and one that memoizes by content must recompute (honest timing). The written value is a
+**keyed hash of the call index** (server-secret), not a monotone counter, so reading it reveals no
+ordinal a kernel could gate on. A server-random, kernel-unknowable sample of timed calls has its
+`(mutated input, output)` captured and **re-derived against the parent's oracle** — spread across **all**
+blocks so it overlaps the median-feeding calls. The input values themselves come from a **server-entropy-
+salted seed** chosen at scoring time (the PR-HEAD SHA is reproducibility metadata only), so a
+precompute-and-memorize attack misses.
+
+Keeping the probe schedule **unreadable** to the kernel is load-bearing, and the structural close is
+**thread isolation**: the kernel — its module-level body *and* every call — runs in a dedicated worker
+thread, while the schedule, the timing events, the clock, and `job` live in the main thread. `f_back`
+walks only the current thread's stack, so the schedule is off the kernel's reachable call stack; the
+process-wide heap-enumeration route (`gc.get_objects`) and the module re-export / loader / `__builtins__`
+routes are closed by the import allowlist + the static attribute bans (re-run inside the scoring
+subprocess on the exact bytes about to execute). A schedule-aware kernel therefore cannot do real work
+only where observed: it must be correct on **every** timed call or risk the probe. Speed cannot be forged
+either — the **primary latency is the per-block synced captured-clock wall** (see above), so side-stream /
+split-K under-reporting buys nothing, and an **absolute roofline floor** (`max(bytes/peak_bw,
+flops/peak_flops)`) rejects any physically-impossible (memoized / cached) GPU time. Together these close
+memoize-and-replay (incl. the padded variant), the predictable-probe-schedule evasion, the frame /
+heap / re-export schedule leaks, and side-stream timing forgery. The fully process-level posture — the
+kernel in a sandboxed child whose memory holds **no** secret at all — is the v2/TEE direction
+([§ residuals](#)); in v1 the secret stays in the child's main thread, protected by thread isolation +
+the bans, with the OS sandbox (below) containing any residual RCE.
 
 **Native no-delegation backstop (the load-bearing guard).** The in-child dispatch trap is necessary
 but not sufficient: a kernel sharing the interpreter can pop the TorchFunction/TorchDispatch mode
@@ -164,7 +170,8 @@ SDPA, row-wise fp8, int4-pack) is shim-blind; those remain guarded only by the s
 | Dynamic dispatch to a banned op (aliasing, `getattr`/`eval`, `torch.__dict__['matmul']`) | builtins ban + introspection-dunder ban + import-alias resolution in the static guard | no (any GEMM that does execute still hits the runtime trap + the shim) |
 | Walk the call stack to read the secret probe schedule (`e.__traceback__.tb_frame.f_back.f_locals`) | **THREAD ISOLATION (structural):** the submission's code — both its module-level body and every `kernel_fn` call — runs in a dedicated WORKER thread, while the probe schedule, the timing events, the captured clock, and `job` all live in the main thread. `f_back` walks only the current thread's stack, and the cross-thread frame-access escapes (`sys._current_frames`/`gc`/`threading`) are import-banned, so the schedule is unreachable regardless of HOW the kernel names an attribute (`getattr`/`operator`/`str.format`/`match`-`case`/a form not yet invented). The static attribute-name bans + Gate-4 re-scan + job-file deletion remain as defense-in-depth | the per-call main↔worker handoff adds latency that inflates the timing of *fast* kernels on a high-thread-latency host (≈2.7× on WSL2; ~0 for kernels ≳500µs since the GPU saturates and hides it). Bare-metal Linux handoffs are ~10-20µs → expected minimal; **must be measured on the production host**, and the host-independent fix (batched timing: worker runs autonomous segments, main intervenes only at the ~24 probe positions) is the fallback if it is not |
 | Infer the probe schedule from the extra buffer cloned at a probed call | `torch.cuda.memory_allocated`/`memory_stats`/`mem_get_info`/… are statically banned, so the kernel cannot read allocator deltas; it also cannot time itself (no `Event`, no `time` import) | low-severity even unbanned (allocator churn is noisy); banned outright regardless |
-| Under-report timing via a side CUDA stream / graph (correct work, fast events) | static ban of the stream/event/graph API under **all** its qualified names — `torch.cuda.Stream`/`Event`/`CUDAGraph`, the canonical `torch.cuda.streams.*`, and the top-level `torch.Stream`/`torch.Event` (Triton uses the current timed stream — the PRIMARY closure) **+** a coarse captured-clock wall anchor (event median ≥ 0.5× per-iter wall; a real offload drives the ratio toward 0) | same enumeration risk as the row above (a stream alias under yet another path); the durable fix is **parent-driven two-point wall timing** (v2), which makes timing forge-resistant without enumerating stream names. A contrived *partial* offload on a Gate-3-bypassed run that parks the ratio above the anchor is the residual until then |
+| Under-report timing via a side CUDA stream / graph / split-K (correct work, fast default-stream events) | the **primary score is the per-block synced captured-clock WALL**, not the cuda events — the full-device sync makes the wall count work on ANY stream, so moving work off the default stream buys nothing; events are kept only as a sanity bound. (The stream/event/graph API is also statically banned under all its qualified names as defense-in-depth.) | the wall is measured by the kernel-unpatchable thread-isolated child clock; a parent-clock interactive RPC is the v2 hardening (low marginal value given thread isolation already protects the schedule) |
+| RCE on the scoring host (`warnings.sys.modules['os'].system`, `mod.__loader__.exec_module`, …) — arbitrary code / file R/W | the kernel runs in an **OS sandbox** (bubblewrap: read-only root, only the per-run scratch writable, no network, dropped caps; `runtime/sandbox.sh`, opt-in via `CCO_ENABLE_SANDBOX` once host-validated) so RCE cannot touch the harness/host; the re-export / loader / `__builtins__` / string-dispatch routes are also statically banned (Gate 3 + Gate-4 re-scan) | the sandbox keeps `/dev/nvidia*` writable (CUDA needs it) so GPU-side isolation is NOT provided — bounded by no-secret-on-the-GPU + one-submission-at-a-time scheduling; GPU-TEE is v2. The static bans are an in-process denylist (non-closable in principle) — the sandbox is the structural backstop |
 | Reach the scored GPU run without the static guard (Gate 3 → Gate 4 gap / TOCTOU) | the static guard is **re-scanned inside the scoring subprocess on the exact bytes about to `exec`**; any violation aborts as a delegation result before the kernel loads | no |
 | Inline CUDA-C escape | banned in v1 (guard rejects `cpp_extension`) | n/a in v1 |
 | Memorize / hardcode outputs for known inputs | PR-HEAD-seeded inputs the kernel **never sees** (process isolation); oracle re-derives truth | no |

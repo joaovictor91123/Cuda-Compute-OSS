@@ -414,6 +414,27 @@ def _repo_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def _sandbox_wrap(cmd: list, scratch_dir: str) -> list:
+    """Phase D — wrap the untrusted-kernel child in an OS sandbox for RCE / filesystem / network
+    containment (NOT GPU isolation: CUDA needs writable /dev/nvidia*, so a kernel can still raw-ioctl the
+    device — GPU-side confidentiality comes from no-secret-in-child, not the jail).
+
+    OPT-IN: set $CCO_SANDBOX to an executable that runs `<scratch_dir> <argv...>` under the jail (the
+    repo ships runtime/sandbox.sh, a bubblewrap profile that binds only `scratch_dir` writable, mounts
+    the root read-only, drops the network + caps, and keeps /dev/nvidia*). When unset — the dev box / WSL2
+    has no bubblewrap — the child runs UNSANDBOXED, which is sound: the load-bearing anti-cheat (parent
+    oracle + forge-resistant wall + no-secret-in-child) holds regardless; the sandbox only contains a
+    kernel that reaches RCE through some not-yet-closed in-process escape. The trusted Linux scoring host
+    sets CCO_SANDBOX (see runtime/start.sh) after validating the profile on that host."""
+    wrapper = os.environ.get("CCO_SANDBOX")
+    if wrapper and os.path.isfile(wrapper) and os.access(wrapper, os.X_OK):
+        return [wrapper, scratch_dir, *cmd]
+    if wrapper:
+        sys.stderr.write(f"cco: CCO_SANDBOX={wrapper!r} is not an executable file — running child "
+                         f"UNSANDBOXED (set it to runtime/sandbox.sh on the trusted host)\n")
+    return cmd
+
+
 def _preload_so() -> "str | None":
     """Resolve the Tier-2 LD_PRELOAD vendor-symbol trap (runtime/cco_preload.so), if built.
 
@@ -626,6 +647,7 @@ def run_isolated(kernel_path: str, config: dict, seed: int, compare_fn, *,
             env["CCO_DELEGATION_LOG"] = deleg_flag
             env["LD_BIND_NOW"] = "1"                      # eager binding (belt-and-suspenders)
         cmd = [sys.executable, "-E", "-c", boot, job_path, out_path]
+        cmd = _sandbox_wrap(cmd, tmp)                 # Phase D: jail the untrusted child (opt-in; host only)
 
         t0 = time.perf_counter()
         proc = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True, timeout=timeout_s)
@@ -652,7 +674,28 @@ def run_isolated(kernel_path: str, config: dict, seed: int, compare_fn, *,
                     "stages": fail_stages, "latencies_us": [], "median_us": 0.0, "mean_us": 0.0,
                     "stdev_us": 0.0, "child_wall_s": child_wall_s}
 
+        # Phase C — IPC hardening: the untrusted child wrote out.pt. Refuse to read it if it is a SYMLINK
+        # or not a regular file (a child with code-exec could repoint it at a host file / device), and
+        # require it to live inside our private 0700 tmp dir.
+        if (os.path.islink(out_path) or not os.path.isfile(out_path)
+                or os.path.realpath(os.path.dirname(out_path)) != os.path.realpath(tmp)):
+            return {**base, "correct": False, "max_abs_error": 0.0, "delegation": None,
+                    "error": "child output path is not a regular file in the private temp dir (IPC tamper)",
+                    "stages": fail_stages, "latencies_us": [], "median_us": 0.0, "mean_us": 0.0,
+                    "stdev_us": 0.0, "child_wall_s": child_wall_s}
+
         res = torch.load(out_path, weights_only=True)  # untrusted child output: tensors only (no pickle-RCE)
+        # Schema-integrity check: a tampered/garbage blob must be rejected, not silently scored. The
+        # timing vectors must be number lists no longer than the requested block count.
+        if not isinstance(res, dict) or not all(
+                isinstance(res.get(_k, []), list)
+                and len(res.get(_k, [])) <= n_blocks
+                and all(isinstance(_x, (int, float)) for _x in res.get(_k, []))
+                for _k in ("event_block_us", "wall_block_us")):
+            return {**base, "correct": False, "max_abs_error": 0.0, "delegation": None,
+                    "error": "child output failed schema-integrity check",
+                    "stages": fail_stages, "latencies_us": [], "median_us": 0.0, "mean_us": 0.0,
+                    "stdev_us": 0.0, "child_wall_s": child_wall_s}
         delegation = res.get("delegation")
         if delegation:
             return {**base, "correct": False, "max_abs_error": 0.0, "delegation": delegation,

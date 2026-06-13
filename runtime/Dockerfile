@@ -21,8 +21,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUTF8=1
 
 # Toolchain: python + a C compiler/headers (Triton JITs C at run time); nvidia-smi ships in base.
+# bubblewrap = the Phase-D untrusted-kernel OS sandbox (runtime/sandbox.sh); enabled via CCO_ENABLE_SANDBOX.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-dev python3-pip build-essential ca-certificates curl \
+        python3 python3-dev python3-pip build-essential ca-certificates curl bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 
 # uv for reproducible installs
@@ -48,12 +49,12 @@ COPY references ./references
 COPY kernel_configs ./kernel_configs
 COPY champions ./champions
 COPY cco.config.json payload-schema.json pyproject.toml ./
-COPY runtime/gpu.config runtime/start.sh runtime/cco_preload.c ./runtime/
+COPY runtime/gpu.config runtime/start.sh runtime/sandbox.sh runtime/cco_preload.c ./runtime/
 # Build the Tier-2 no-delegation LD_PRELOAD trap from its (manifest-pinned) source. Pure libc — no
 # CUDA headers; interposes vendor compute symbols by NAME, so it is cuBLAS-12.x-version-independent.
 # Built in-image (not committed) so the binary matches the image glibc; cco/isolate.py LD_PRELOADs it
 # into the scoring child only, and refuses to score if a plain torch.mm does not trip it (fail-closed).
-RUN chmod +x runtime/start.sh \
+RUN chmod +x runtime/start.sh runtime/sandbox.sh \
     && gcc -shared -fPIC -O2 -fvisibility=default -o runtime/cco_preload.so runtime/cco_preload.c
 COPY kernel.py ./kernel.py
 

@@ -51,6 +51,35 @@ if [[ "${NPROC}" -ne 0 ]]; then
   exit 4
 fi
 
+# --- 2b. GPU-mode hygiene: Default compute mode + MPS OFF (no shared/cross-submission CUDA context),
+#         and minimum compute capability. (The sandbox keeps /dev/nvidia* writable, so disjoint CUDA
+#         contexts + exclusive scheduling are what bound cross-submission GPU interference.) ---
+CMODE="$(nvidia-smi --id="${GPU_INDEX}" --query-gpu=compute_mode --format=csv,noheader)"
+if [[ "${CMODE}" != "Default" ]]; then
+  echo "FATAL: GPU ${GPU_INDEX} compute mode is '${CMODE}', expected 'Default' (no MPS / EXCLUSIVE sharing)" >&2
+  exit 6
+fi
+if pgrep -x nvidia-cuda-mps-control >/dev/null 2>&1; then
+  echo "FATAL: NVIDIA MPS control daemon is running — disable it (cross-submission context sharing)" >&2
+  exit 7
+fi
+CC_LIVE="$(nvidia-smi --id="${GPU_INDEX}" --query-gpu=compute_cap --format=csv,noheader | tr -d ' .')"
+if [[ -n "${CC_LIVE}" && "${CC_LIVE}" -lt 70 ]]; then
+  echo "FATAL: GPU compute capability ${CC_LIVE} < 70 (unsupported)" >&2
+  exit 8
+fi
+
+# --- 2c. Untrusted-kernel OS sandbox (Phase D). Enabled only after the operator has validated
+#         runtime/sandbox.sh runs a clean kernel on THIS host (a wrong jail would break the rerun);
+#         set CCO_ENABLE_SANDBOX=1 in the image once validated. When off, the load-bearing anti-cheat
+#         (parent oracle + forge-resistant wall + no-secret-in-child) still holds. ---
+if [[ "${CCO_ENABLE_SANDBOX:-0}" == "1" ]] && command -v bwrap >/dev/null 2>&1; then
+  export CCO_SANDBOX="${HERE}/sandbox.sh"
+  echo "sandbox    : ON (${CCO_SANDBOX})"
+else
+  echo "sandbox    : OFF (set CCO_ENABLE_SANDBOX=1 after validating runtime/sandbox.sh on this host; needs bwrap)"
+fi
+
 # --- 3. Lock clocks (best-effort; needs a privileged container). Stable clocks => stable timing ---
 if [[ "${CCO_LOCK_CLOCKS:-1}" == "1" ]]; then
   nvidia-smi --id="${GPU_INDEX}" -pm 1 >/dev/null 2>&1 || echo "warn: could not enable persistence mode" >&2

@@ -8,7 +8,7 @@
     "cco/dispatch_trap.py": "41256fea1bc7709f84a6a1c908f0c93525c6d3dfe4d552db80533fd0584a7f99",
     "cco/gate.py": "ebb4955a5ce8124da96952824915977811c9f6b67ba5eddc34dc3e2d29acc528",
     "cco/guard_kernel.py": "870cecadeacad87ea522114ad1d749979da68352a8b2cc51c37869de16ed5867",
-    "cco/isolate.py": "21a4636147bbd3490d8989451954f3d90dd715433f694c1778cff38ba9d8318d",
+    "cco/isolate.py": "6cee561983ee8232dde19aa59064458bb868efa6e2a845d0a2f3b53c22ee2976",
     "cco/manifest_tool.py": "2089be35dbaaa233e0b7685feb5d6be5237d29a53afa9326cf1493945740a6fc",
     "cco/seed.py": "b978dcefbc679ea5ccfa0de75038906d22dceb9ece6c170da2f2eab1ae761bb6",
     "cco/significance.py": "cd6c1ad68aa7eacbc1a6506c81f26b00ac26fc3c010f9d453502530fe8c82604",
@@ -37,10 +37,11 @@
     "references/qkv_part_rope.py": "fc88d52ca8f14584af5ba9c989ddfa7a0c22bdcaedb7e3b14fd7147b7f7b9af5",
     "references/rms_norm.py": "1d89829c71fd4fb0a5867f669a26bcd25090560362bc2212f60597fbb5260b4f",
     "references/swiglu_input_quant.py": "7042bce1e76151dd50a0ec78b70f23613b3f91765df9570ee45fcba2c33935f6",
-    "runtime/Dockerfile": "ec9d2df429db1bff9fcd2c9eef9a0ee111ffd89612f23120ae19db6ab5def702",
+    "runtime/Dockerfile": "e630305ba3c33661f7b0181ddaeb78a1889f56c87c0a85e46eb52a5c26b9892a",
     "runtime/cco_preload.c": "3e58b959aa017bee55d065f86a62b6d9a5f9b2df1ecbe11abf675dd78d408ee1",
     "runtime/gpu.config": "300701d76f24472383a47db504a7e45cfea262682c0dafe387cf6a992c0525d9",
-    "runtime/start.sh": "d7c6e620953102503fb414d70deb0ae3a51bc8428093c5e9c9c65e9f6039fdfe",
+    "runtime/sandbox.sh": "4eb38ff3714c2acabb49918187c85b1b765daf0f99f23cd61deca6e67188c0a1",
+    "runtime/start.sh": "0ef8b94120290cdb75a667d30388fc35940546e5f0bb29a1e6b171581f054a9a",
     "uv.lock": "0b257efecd8de294e16c1c9c98616b2f00fb50244e5793d0ab7fd1d02fd4663a"
   },
   "locked_paths": [
