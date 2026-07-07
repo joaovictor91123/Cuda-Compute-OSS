@@ -4,7 +4,28 @@
     "mode": "batched-sequential",
     "ready_label": "status:queued-gpu"
   },
-  "open_prs": [],
-  "queue": [],
-  "updated": ""
+  "open_prs": [
+    {
+      "author": "kaozyn",
+      "detail": "",
+      "head_sha": "f1c8b7bd8f6dd8e951d2382c4d2e84370065eb3a",
+      "pr": 109,
+      "state": "already_evaluated",
+      "title": "[test] exercise mock workflow from fork",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/109"
+    }
+  ],
+  "queue": [
+    {
+      "author": "kaozyn",
+      "detail": "",
+      "head_sha": "f1c8b7bd8f6dd8e951d2382c4d2e84370065eb3a",
+      "position": 1,
+      "pr": 109,
+      "state": "already_evaluated",
+      "title": "[test] exercise mock workflow from fork",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/109"
+    }
+  ],
+  "updated": "2026-07-07T13:02:15+00:00"
 }
