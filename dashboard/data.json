@@ -16,28 +16,31 @@
     },
     {
       "author": "philluiz2323",
-      "detail": "",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
       "head_sha": "7c2ea4cb0dec19118c4e23f634b7a45d14f291a1",
+      "label": "status:queued-gpu",
       "pr": 110,
-      "state": "already_evaluated",
+      "state": "eval_pending",
       "title": "fix(matmul): reject non-positive --tile in Config (#80)",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/110"
     },
     {
       "author": "philluiz2323",
-      "detail": "",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
       "head_sha": "66215ef1d350f4be26347b2c5afa49de9820107c",
+      "label": "status:queued-gpu",
       "pr": 111,
-      "state": "already_evaluated",
+      "state": "eval_pending",
       "title": "fix(matmul): budget fp16 fp32-upcast temporaries in _fits_in_core (#63)",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/111"
     },
     {
       "author": "RealDiligent",
-      "detail": "",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
       "head_sha": "d9adcd9d6624be952fb23eb85a8d900a398c3bd3",
+      "label": "status:queued-gpu",
       "pr": 112,
-      "state": "already_evaluated",
+      "state": "eval_pending",
       "title": "fix(strategy): stream K tiles in multiply_exact for memmap inputs",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/112"
     },
@@ -54,16 +57,49 @@
   ],
   "queue": [
     {
+      "author": "philluiz2323",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
+      "head_sha": "7c2ea4cb0dec19118c4e23f634b7a45d14f291a1",
+      "label": "status:queued-gpu",
+      "position": 1,
+      "pr": 110,
+      "state": "eval_pending",
+      "title": "fix(matmul): reject non-positive --tile in Config (#80)",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/110"
+    },
+    {
+      "author": "philluiz2323",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
+      "head_sha": "66215ef1d350f4be26347b2c5afa49de9820107c",
+      "label": "status:queued-gpu",
+      "position": 2,
+      "pr": 111,
+      "state": "eval_pending",
+      "title": "fix(matmul): budget fp16 fp32-upcast temporaries in _fits_in_core (#63)",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/111"
+    },
+    {
+      "author": "RealDiligent",
+      "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
+      "head_sha": "d9adcd9d6624be952fb23eb85a8d900a398c3bd3",
+      "label": "status:queued-gpu",
+      "position": 3,
+      "pr": 112,
+      "state": "eval_pending",
+      "title": "fix(strategy): stream K tiles in multiply_exact for memmap inputs",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/112"
+    },
+    {
       "author": "RealDiligent",
       "detail": "gate chain passed; GPU eval runner is not wired up yet in this repo (Phase 2)",
       "head_sha": "4c8e85f934bf464b4fbab4bbbb47fe62436b711c",
       "label": "status:queued-gpu",
-      "position": 1,
+      "position": 4,
       "pr": 113,
       "state": "eval_pending",
       "title": "fix(storage): thread seed through iota fill so eval couples differ (#104)",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/113"
     }
   ],
-  "updated": "2026-07-07T13:47:01+00:00"
+  "updated": "2026-07-07T13:48:20+00:00"
 }
