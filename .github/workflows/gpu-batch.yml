@@ -145,7 +145,7 @@ jobs:
           tmpdir="$(mktemp -d)"
           cp eval/ledger.jsonl "$tmpdir/ledger.jsonl"
           cp dashboard/results.json "$tmpdir/results.json"
-          for path in eval/ledger.jsonl dashboard/results.json; do
+          for path in dashboard/data.json eval/ledger.jsonl dashboard/results.json; do
             if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
               git restore "$path"
             else
