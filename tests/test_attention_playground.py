@@ -9,9 +9,12 @@ try:
 except Exception:  # noqa: BLE001
     torch = None
 
+from attention import AttentionSpec
+
 if torch is not None:
     from attention import (
         exact_attention,
+        generate_qkv,
         hybrid_attention,
         local_window_attention,
         spectral_global_mix,
@@ -30,6 +33,24 @@ def _sample(seq=16, dim=8):
     k = torch.randn(1, 2, seq, dim, dtype=torch.float32)
     v = torch.randn(1, 2, seq, dim, dtype=torch.float32)
     return q, k, v
+
+
+def test_attention_spec_defaults_are_stable():
+    spec = AttentionSpec()
+    assert spec.batch == 1
+    assert spec.heads == 8
+    assert spec.seq == 4096
+    assert spec.window == 256
+
+
+def test_generate_qkv_uses_spec_shape():
+    if _skip_if_no_torch():
+        return
+    spec = AttentionSpec(batch=2, heads=3, seq=10, dim=7, dtype="fp32", device="cpu")
+    q, k, v = generate_qkv(spec)
+    assert tuple(q.shape) == (2, 3, 10, 7)
+    assert tuple(k.shape) == (2, 3, 10, 7)
+    assert tuple(v.shape) == (2, 3, 10, 7)
 
 
 def test_exact_attention_shape():

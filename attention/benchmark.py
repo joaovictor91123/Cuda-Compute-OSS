@@ -6,6 +6,9 @@ import json
 import math
 import time
 
+from .data import generate_qkv, resolve_device
+from .spec import AttentionSpec
+
 
 def _torch():
     try:
@@ -16,17 +19,6 @@ def _torch():
             "uv sync --extra gpu"
         ) from exc
     return torch
-
-
-def _device(device: str):
-    torch = _torch()
-    if device == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda:0")
-        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(device)
 
 
 def _synchronize(dev) -> None:
@@ -83,17 +75,22 @@ def run_once(
     from .hybrid import hybrid_attention
     from .reference import exact_attention
 
-    dev = _device(device)
-    torch_dtype = {
-        "fp16": torch.float16,
-        "fp32": torch.float32,
-        "fp64": torch.float64,
-    }[dtype]
-    gen = torch.Generator(device=dev.type if dev.type != "mps" else "cpu").manual_seed(seed)
-    shape = (batch, heads, seq, dim)
-    q = torch.randn(shape, generator=gen, device=dev, dtype=torch_dtype)
-    k = torch.randn(shape, generator=gen, device=dev, dtype=torch_dtype)
-    v = torch.randn(shape, generator=gen, device=dev, dtype=torch_dtype)
+    spec = AttentionSpec(
+        batch=batch,
+        heads=heads,
+        seq=seq,
+        dim=dim,
+        dtype=dtype,
+        window=window,
+        local_weight=local_weight,
+        global_weight=global_weight,
+        freq_decay=freq_decay,
+        causal=causal,
+        seed=seed,
+        device=device,
+    )
+    dev = resolve_device(spec.device)
+    q, k, v = generate_qkv(spec, device=dev)
 
     # Warm up kernels before measurement.
     _ = exact_attention(q[:, :, : min(seq, 64), :], k[:, :, : min(seq, 64), :], v[:, :, : min(seq, 64), :], causal=causal)
@@ -121,20 +118,7 @@ def run_once(
     rel = _rel_fro(hybrid, exact)
 
     return {
-        "config": {
-            "batch": batch,
-            "heads": heads,
-            "seq": seq,
-            "dim": dim,
-            "dtype": dtype,
-            "window": window,
-            "local_weight": local_weight,
-            "global_weight": global_weight,
-            "freq_decay": freq_decay,
-            "causal": causal,
-            "seed": seed,
-            "device": str(dev),
-        },
+        "config": {**spec.as_dict(), "device": str(dev)},
         "exact": {
             "latency_s": exact_s,
             "peak_vram_bytes": exact_peak,
