@@ -128,17 +128,17 @@
     },
     {
       "author": "carlh7777",
-      "detail": "Declare this PR as either fix/bug or feat/strategy in the title or PR template so automation can route it correctly.",
-      "gpu_required": false,
+      "detail": "PR body is missing a filled-in scorecard (see CONTRIBUTING.md)",
+      "gpu_required": true,
       "head_sha": "77032f9d15a0a07086605e5159aa5fdd1c4e3a7d",
-      "kind": "unknown",
-      "label": "status:needs-pr-kind",
+      "kind": "feat",
+      "label": "status:needs-scorecard",
       "pr": 121,
-      "state": "needs_pr_kind",
+      "state": "needs_scorecard",
       "title": "feat: add --keep flag to compare function for disk cleanup control",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/121"
     }
   ],
   "queue": [],
-  "updated": "2026-07-09T09:40:09+00:00"
+  "updated": "2026-07-09T09:42:41+00:00"
 }
