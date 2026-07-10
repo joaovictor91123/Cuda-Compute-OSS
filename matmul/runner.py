@@ -64,11 +64,14 @@ def run(n: int, cfg: Config, fill: str = "random",
         print(f"[run] throughput   : {info['gflops']:.1f} GFLOP/s")
 
     if verify:
-        info["verify"] = _verify(A, B, C, n, cfg)
+        info["verify"] = _verify(A, B, C, n, cfg, backend)
         if cfg.verbose:
             v = info["verify"]
-            print(f"[run] verify       : max_rel_err={v['max_rel_err']:.2e} "
-                  f"({'OK' if v['ok'] else 'MISMATCH'})")
+            if v.get("skipped"):
+                print(f"[run] verify       : skipped ({v['skipped']})")
+            else:
+                print(f"[run] verify       : max_rel_err={v['max_rel_err']:.2e} "
+                      f"({'OK' if v['ok'] else 'MISMATCH'})")
 
     if on_disk and not keep:
         for p in (pa, pb, pc):
@@ -80,8 +83,17 @@ def run(n: int, cfg: Config, fill: str = "random",
     return info
 
 
-def _verify(A, B, C, n: int, cfg: Config) -> dict:
-    """Compare against a float64 CPU reference. Only sensible for small n."""
+def _verify(A, B, C, n: int, cfg: Config, backend: Backend) -> dict:
+    """Compare against a float64 CPU reference. Only sensible for small n:
+    it materializes A, B, the reference product and C as float64 in host RAM
+    (~4*n*n*8 bytes) and runs an O(n^3) CPU multiply, so it is SKIPPED when that
+    working set would not fit safely -- otherwise --verify on a large / disk-backed
+    run OOMs the host after the GPU multiply already succeeded."""
+    need = 4 * n * n * 8                      # A_f64, B_f64, ref, got
+    host_free = backend.host_available_bytes()
+    if need > 0.5 * host_free:
+        return {"skipped": f"n={n}: float64 CPU reference needs ~{storage.bytes_human(need)}, "
+                f"over 50% of ~{storage.bytes_human(host_free)} host RAM"}
     ref = np.asarray(A, dtype=np.float64) @ np.asarray(B, dtype=np.float64)
     got = np.asarray(C, dtype=np.float64)
     denom = np.linalg.norm(ref) or 1.0
