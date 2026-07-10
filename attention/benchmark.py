@@ -219,7 +219,9 @@ def run_once(
             },
             "improvement": {
                 "faster_than_exact": latency_s < exact_s,
-                "less_vram_than_exact": peak < exact_peak if exact_peak or peak else False,
+                # VRAM is only measured on CUDA (_peak_bytes returns 0 elsewhere);
+                # report None ("unknown") off-CUDA instead of a misleading False.
+                "less_vram_than_exact": (peak < exact_peak) if dev.type == "cuda" else None,
                 "latency_ratio_exact_over_candidate": (exact_s / latency_s) if latency_s > 0 else math.inf,
             },
         }
