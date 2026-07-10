@@ -70,7 +70,7 @@ on your GPU. The reference regime is `N=12000`, 3 couples, `fp32`, **full-rank**
 | aspect              | general (exact) | suggested (rsvd) | suggested better? |
 |---------------------|-----------------|------------------|-------------------|
 | accuracy            | 1.0000 (truth)  | **≈ 0**          | **no** — collapses |
-| time complexity     | `O(N³)`         | `O(N²M)`, ~4× fewer FLOPs, fitted `N^p` | yes (FLOPs) |
+| time complexity     | `O(N³)`         | `O(N²M)`, ≈2× fewer FLOPs (ratio 4M/N ≈ 0.5 at M=N/8), fitted `N^p` | yes (FLOPs) |
 | latency             | _your GPU_      | _your GPU_       | measure           |
 | VRAM usage          | _your GPU_      | _your GPU_       | measure           |
 
