@@ -1,10 +1,13 @@
 {
   "gpu_policy": {
     "cadence": "one or two maintainer-controlled GPU windows per day",
+    "gpu_required_for": [
+      "feat"
+    ],
     "mode": "batched-sequential",
     "ready_label": "status:queued-gpu"
   },
   "open_prs": [],
   "queue": [],
-  "updated": ""
+  "updated": "2026-07-10T08:48:28+00:00"
 }
