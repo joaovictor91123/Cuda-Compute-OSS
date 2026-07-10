@@ -60,10 +60,13 @@ def _exact_tile(n: int, backend: Backend, item_bytes: int, frac: float) -> int:
     """Tile edge for row- and k-blocking in ``multiply_exact``.
 
     Per (row, k) step the device holds an accumulator (T x n), an A panel
-    (T x T), and a B panel (T x n): T * (2n + T) elements total.
+    (T x T), a B panel (T x n), and the GEMM output ``matmul(Ar, Bk)`` (T x n) --
+    which cannot alias either operand and is live while it is folded into ``acc``.
+    That is T * (3n + T) elements, so solve T^2 + 3nT - budget = 0 (see #144;
+    #95 and #138 are the same omission in ``matmul/gemm.py`` and ``_row_block``).
     """
     budget_elems = max(1, int(backend.free_compute_bytes() * frac) // item_bytes)
-    t = int((math.sqrt(4 * n * n + 4 * budget_elems) - 2 * n) / 2)
+    t = int((math.sqrt(9 * n * n + 4 * budget_elems) - 3 * n) / 2)
     return max(1, min(t, n))
 
 
@@ -240,7 +243,9 @@ def multiply_exact(A, B, C, backend: Backend, cfg: Config) -> dict:
             Bk = backend.to_device(
                 np.asarray(B[k0:k1, :]).astype(dt, copy=False)
             )
-            acc = acc + backend.matmul(Ar, Bk)
+            # In-place: `acc = acc + prod` would build a second (ti, n) tensor
+            # while the old acc is still live, on top of the product itself.
+            acc += backend.matmul(Ar, Bk)
         C[r0:r1, :] = backend.to_host(acc).astype(cfg.np_dtype, copy=False)
     if isinstance(C, np.memmap):
         C.flush()
