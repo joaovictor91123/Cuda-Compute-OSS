@@ -14,8 +14,10 @@ For square `n × n` A, B and an orthonormal `n × M` basis `Q` (M ≪ n):
       --reconstruct-> C = Q C̃ Qᵀ                   (N,N)
 ```
 
-Cost drops from `O(N³)` to `O(N²M)` (FLOP ratio ≈ `3M/N`). The projections
-stream over A/B one row-block at a time, so this stays out-of-core (memmap).
+Cost drops from `O(N³)` to `O(N²M)` (FLOP ratio ≈ `4M/N`, once the mandatory
+per-call basis construction is counted — not `3M/N`, which omits it and overstates
+the savings). The projections stream over A/B one row-block at a time, so this
+stays out-of-core (memmap).
 
 ## Honesty about accuracy — READ THIS
 
