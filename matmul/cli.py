@@ -49,7 +49,7 @@ def main(argv=None) -> int:
     )
     try:
         info = runner.run(args.n, cfg, fill=args.fill, verify=args.verify, keep=args.keep)
-    except RuntimeError as e:
+    except (RuntimeError, MemoryError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
     if args.quiet:

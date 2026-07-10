@@ -73,10 +73,14 @@ def run(n: int, cfg: Config, fill: str = "lowrank", verify: bool = False,
               f"fewer FLOPs than exact")
 
     if verify:
-        info["verify"] = _verify(A, B, C, cfg)
+        info["verify"] = _verify(A, B, C, n, cfg, backend)
         if cfg.verbose:
-            print(f"[strategy] rel. error : {info['verify']['max_rel_err']:.2e} "
-                  f"(approximate by design)")
+            v = info["verify"]
+            if v.get("skipped"):
+                print(f"[strategy] rel. error : skipped ({v['skipped']})")
+            else:
+                print(f"[strategy] rel. error : {v['max_rel_err']:.2e} "
+                      f"(approximate by design)")
 
     if on_disk and not keep:
         for p in (pa, pb, pc):
@@ -139,8 +143,17 @@ def compare(n: int, cfg: Config, fill: str = "lowrank",
     return out
 
 
-def _verify(A, B, C, cfg: Config) -> dict:
-    """Reconstruction error vs a float64 CPU reference. Small n only."""
+def _verify(A, B, C, n: int, cfg: Config, backend: Backend) -> dict:
+    """Reconstruction error vs a float64 CPU reference. Small n only:
+    it materializes A, B, the reference product and C as float64 in host RAM
+    (~4*n*n*8 bytes) and runs an O(n^3) CPU multiply, so it is SKIPPED when that
+    working set would not fit safely -- otherwise --verify on a large / disk-backed
+    run OOMs the host after the smart multiply already succeeded."""
+    need = 4 * n * n * 8                      # A_f64, B_f64, ref, got
+    host_free = backend.host_available_bytes()
+    if need > 0.5 * host_free:
+        return {"skipped": f"n={n}: float64 CPU reference needs ~{storage.bytes_human(need)}, "
+                f"over 50% of ~{storage.bytes_human(host_free)} host RAM"}
     ref = np.asarray(A, dtype=np.float64) @ np.asarray(B, dtype=np.float64)
     got = np.asarray(C, dtype=np.float64)
     rel_err = float(np.linalg.norm(got - ref) / (np.linalg.norm(ref) or 1.0))
