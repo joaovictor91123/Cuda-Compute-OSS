@@ -18,7 +18,7 @@
       "pr": 127,
       "state": "non_gpu_review",
       "title": "fix(strategy): delegate CPUBackend.host_available_bytes to shared cross-platform helper",
-      "updated_at": "2026-07-10T02:33:48Z",
+      "updated_at": "2026-07-10T03:37:04Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/127"
     },
     {
@@ -31,7 +31,7 @@
       "pr": 130,
       "state": "non_gpu_review",
       "title": "fix(strategy): stream B in k-blocks inside multiply_exact for memmap inputs",
-      "updated_at": "2026-07-10T02:33:52Z",
+      "updated_at": "2026-07-10T03:37:08Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/130"
     },
     {
@@ -44,7 +44,7 @@
       "pr": 131,
       "state": "non_gpu_review",
       "title": "fix(strategy): reserve Q/Ctil VRAM in subspace row-block budgeting",
-      "updated_at": "2026-07-10T02:33:56Z",
+      "updated_at": "2026-07-10T03:37:12Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/131"
     },
     {
@@ -57,7 +57,7 @@
       "pr": 132,
       "state": "non_gpu_review",
       "title": "fix(strategy): drop rsvd's redundant col(B) sketch (3-way budget split)",
-      "updated_at": "2026-07-10T02:34:00Z",
+      "updated_at": "2026-07-10T03:37:16Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/132"
     },
     {
@@ -70,10 +70,22 @@
       "pr": 134,
       "state": "non_gpu_review",
       "title": "fix(attention): guard all-masked softmax rows in causal landmark attention",
-      "updated_at": "2026-07-10T02:34:04Z",
+      "updated_at": "2026-07-10T03:37:21Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/134"
+    },
+    {
+      "author": "galuis116",
+      "detail": "This PR has merge conflicts with the base branch. Resolve them within 12 hours or the bot will close the PR automatically.",
+      "gpu_required": false,
+      "head_sha": "f570cfea51bd7c2eae0ce757144d9268d06c7d9e",
+      "kind": null,
+      "pr": 135,
+      "state": "needs_merge_conflict_resolution",
+      "title": "fix(storage): thread the seed through the iota fill so A != B and couples differ",
+      "updated_at": "2026-07-10T05:16:43Z",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/135"
     }
   ],
   "queue": [],
-  "updated": "2026-07-10T03:37:23+00:00"
+  "updated": "2026-07-10T05:18:57+00:00"
 }
