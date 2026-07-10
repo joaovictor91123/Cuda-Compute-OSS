@@ -18,7 +18,7 @@
       "pr": 127,
       "state": "non_gpu_review",
       "title": "fix(strategy): delegate CPUBackend.host_available_bytes to shared cross-platform helper",
-      "updated_at": "2026-07-10T02:26:49Z",
+      "updated_at": "2026-07-10T02:33:48Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/127"
     },
     {
@@ -31,7 +31,7 @@
       "pr": 130,
       "state": "non_gpu_review",
       "title": "fix(strategy): stream B in k-blocks inside multiply_exact for memmap inputs",
-      "updated_at": "2026-07-10T02:26:53Z",
+      "updated_at": "2026-07-10T02:33:52Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/130"
     },
     {
@@ -44,7 +44,7 @@
       "pr": 131,
       "state": "non_gpu_review",
       "title": "fix(strategy): reserve Q/Ctil VRAM in subspace row-block budgeting",
-      "updated_at": "2026-07-10T02:26:57Z",
+      "updated_at": "2026-07-10T02:33:56Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/131"
     },
     {
@@ -57,7 +57,7 @@
       "pr": 132,
       "state": "non_gpu_review",
       "title": "fix(strategy): drop rsvd's redundant col(B) sketch (3-way budget split)",
-      "updated_at": "2026-07-10T02:27:01Z",
+      "updated_at": "2026-07-10T02:34:00Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/132"
     },
     {
@@ -70,10 +70,10 @@
       "pr": 134,
       "state": "non_gpu_review",
       "title": "fix(attention): guard all-masked softmax rows in causal landmark attention",
-      "updated_at": "2026-07-10T02:32:36Z",
+      "updated_at": "2026-07-10T02:34:04Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/134"
     }
   ],
   "queue": [],
-  "updated": "2026-07-10T02:34:07+00:00"
+  "updated": "2026-07-10T03:37:23+00:00"
 }
