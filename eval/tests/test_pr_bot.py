@@ -25,6 +25,7 @@ from eval.pr_bot import (
     already_evaluated,
     already_queued,
     already_notified,
+    blocking_change_comment_time,
     build_queue_dashboard,
     changed_files,
     excess_open_prs,
@@ -218,6 +219,53 @@ def test_missing_scorecard_is_flagged():
     assert out.label == "status:needs-scorecard"
 
 
+def test_stale_missing_scorecard_closes_after_grace_window():
+    pr = _pr(number=1, head_sha="sha1", body=NO_SCORECARD_BODY)
+    warned_at = datetime(2026, 7, 10, 8, 0, tzinfo=timezone.utc)
+    marker = f"<!-- cco-blocking-change:scorecard:sha1:{warned_at.isoformat()} -->"
+    out = process_pr(
+        pr,
+        SOME_DIFF,
+        [marker],
+        frozenset(),
+        [],
+        now=warned_at + timedelta(hours=12, minutes=1),
+    )
+    assert out.action == "close_stale_blocking_request"
+    assert "scorecard" in out.detail
+
+
+def test_blocking_change_timer_resets_on_new_head_sha():
+    pr = _pr(number=1, head_sha="sha2", body=NO_SCORECARD_BODY)
+    warned_at = datetime(2026, 7, 10, 8, 0, tzinfo=timezone.utc)
+    old_marker = f"<!-- cco-blocking-change:scorecard:sha1:{warned_at.isoformat()} -->"
+    out = process_pr(
+        pr,
+        SOME_DIFF,
+        [old_marker],
+        frozenset(),
+        [],
+        now=warned_at + timedelta(hours=12, minutes=1),
+    )
+    assert out.action == "needs_scorecard"
+
+
+def test_maintainer_hold_label_prevents_stale_blocking_close():
+    pr = _pr(number=1, head_sha="sha1", body=NO_SCORECARD_BODY)
+    pr.labels = ("status:maintainer-review",)
+    warned_at = datetime(2026, 7, 10, 8, 0, tzinfo=timezone.utc)
+    marker = f"<!-- cco-blocking-change:scorecard:sha1:{warned_at.isoformat()} -->"
+    out = process_pr(
+        pr,
+        SOME_DIFF,
+        [marker],
+        frozenset(),
+        [],
+        now=warned_at + timedelta(hours=12, minutes=1),
+    )
+    assert out.action == "needs_scorecard"
+
+
 def test_clean_pr_with_no_runner_is_eval_pending():
     out = process_pr(_pr(body=SCORECARD_BODY), SOME_DIFF, [], frozenset(), [], run_eval=None)
     assert out.action == "eval_pending"
@@ -263,6 +311,16 @@ def test_merge_conflict_comment_time_ignores_other_heads_and_picks_latest():
         "<!-- cco-merge-conflict:sha1:2026-07-10T03:00:00+00:00 -->",
     ]
     when = merge_conflict_comment_time(comments, "sha1")
+    assert when == datetime(2026, 7, 10, 3, 0, tzinfo=timezone.utc)
+
+
+def test_blocking_change_comment_time_filters_reason_and_head():
+    comments = [
+        "<!-- cco-blocking-change:scorecard:sha0:2026-07-10T01:00:00+00:00 -->",
+        "<!-- cco-blocking-change:pr-kind:sha1:2026-07-10T02:00:00+00:00 -->",
+        "<!-- cco-blocking-change:scorecard:sha1:2026-07-10T03:00:00+00:00 -->",
+    ]
+    when = blocking_change_comment_time(comments, "sha1", "scorecard")
     assert when == datetime(2026, 7, 10, 3, 0, tzinfo=timezone.utc)
 
 
@@ -347,7 +405,8 @@ def test_run_once_live_mode_applies_actions():
 
 def test_run_once_live_mode_does_not_repeat_needs_scorecard_comment():
     pr1 = _pr(number=1, author="alice", body=NO_SCORECARD_BODY)
-    marker = NEEDS_SCORECARD_MARKER.format(sha="sha1")
+    recent = (datetime.now(timezone.utc) - timedelta(hours=1)).replace(microsecond=0)
+    marker = f"<!-- cco-blocking-change:scorecard:sha1:{recent.isoformat()} -->"
     client = FakeClient(
         prs={"all": [pr1], "open": [pr1]},
         diffs={1: SOME_DIFF},
@@ -357,6 +416,20 @@ def test_run_once_live_mode_does_not_repeat_needs_scorecard_comment():
     assert outcomes[0].action == "needs_scorecard"
     assert ("add_label", 1, "status:needs-scorecard") in client.actions
     assert not any(a[0] == "post_comment" for a in client.actions)
+
+
+def test_run_once_live_mode_closes_stale_scorecard_request():
+    pr1 = _pr(number=1, author="alice", body=NO_SCORECARD_BODY)
+    stale = (datetime.now(timezone.utc) - timedelta(hours=12, minutes=5)).replace(microsecond=0)
+    marker = f"<!-- cco-blocking-change:scorecard:sha1:{stale.isoformat()} -->"
+    client = FakeClient(
+        prs={"all": [pr1], "open": [pr1]},
+        diffs={1: SOME_DIFF},
+        comments={1: [marker]},
+    )
+    outcomes = run_once(client, dry_run=False)
+    assert outcomes[0].action == "close_stale_blocking_request"
+    assert ("close_pr", 1, outcomes[0].detail) in client.actions
 
 
 def test_run_once_live_mode_blocks_coding_agent_coauthor_footer():

@@ -244,9 +244,11 @@ and does not put a PR into the GPU queue.
 8. **Keep your queue small.** A miner may have at most **2 open PRs** at once.
    If you open a third, the bot keeps the **two oldest** open PRs and closes
    the newer overflow PR automatically.
-9. **Resolve merge conflicts promptly.** If GitHub reports a merge conflict,
-   the bot comments once on that conflicted head SHA. If the conflict is still
-   unresolved **12 hours** later, the bot closes the PR automatically.
+9. **Resolve blocking bot requests promptly.** Missing PR kind, missing `feat`
+   scorecard, protected-path edits, and merge conflicts are blocking requests.
+   The bot comments once for the current head SHA. If that same head SHA is
+   still unfixed **12 hours** later, the bot closes the PR automatically. Pushing
+   a new commit resets the timer.
 
 If you are coming in through Gittensor, contribute through the same GitHub path
 as everyone else: code in a branch, benchmark locally, and submit a PR with
@@ -325,10 +327,14 @@ is `feat`.
   attention track is implemented.
 - each miner may keep only **2 open PRs**. If a third or later PR is opened,
   the bot closes the newer overflow PRs and keeps the two oldest open ones.
-- a PR with GitHub-reported merge conflicts is temporarily blocked from normal
-  routing. The bot posts one resolve-conflict reminder for the current head SHA.
-  If that same conflicted SHA is still open **12 hours** later, the bot closes
-  the PR automatically.
+- missing PR kind, missing `feat` scorecard, protected-path edits, and
+  GitHub-reported merge conflicts are temporary blocking states. The bot posts
+  one reminder for the current head SHA. If that same SHA is still unfixed
+  **12 hours** later, the bot closes the PR automatically. A new commit resets
+  the timer. Maintainers can prevent stale auto-close with a hold/manual-review
+  label when a PR needs exceptional handling.
+- coding-agent co-author footers and open-PR-limit overflow are hard rule
+  violations and are closed immediately rather than waiting 12 hours.
 
 The dashboard UI itself is expected to live in a separate private repository,
 so `main` stays protected while the bot publishes queue/result data to that
