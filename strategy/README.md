@@ -38,9 +38,10 @@ and swappable/updatable via a registry:
 
 | transform | kind | best for |
 |---|---|---|
-| `rsvd`   | **data-dependent** range finder over A and B | general low-rank data (accurate) |
+| `rsvd`    | **data-dependent** range finder over A and B | general low-rank data (accurate) |
+| `nystrom` | **data-dependent** landmark columns of A/B + thin QR | low-rank data (cheaper basis than rsvd) |
 
-`rsvd` is the **only** built-in transform. New transforms are the contribution
+`rsvd` and `nystrom` are the built-in transforms. New transforms are the contribution
 surface — subclass `Transform` and register your own below.
 
 Register your own (the updatable hook):
