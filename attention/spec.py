@@ -3,6 +3,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+# Element types the playground supports. Keep in sync with
+# attention.data.torch_dtype's mapping and the benchmark CLI's --dtype choices;
+# tests/test_attention_playground.py asserts they match.
+DTYPES = ("fp16", "fp32", "fp64")
+
 
 @dataclass(frozen=True)
 class AttentionSpec:
@@ -31,6 +36,10 @@ class AttentionSpec:
             raise ValueError("at least one branch weight must be positive")
         if self.freq_decay < 0:
             raise ValueError("freq_decay must be >= 0")
+        if self.dtype not in DTYPES:
+            # Without this guard a bad dtype constructs fine and only blows up
+            # later in data.torch_dtype with an opaque KeyError (#173).
+            raise ValueError(f"dtype must be one of {DTYPES}, got {self.dtype!r}")
 
     def as_dict(self) -> dict:
         return asdict(self)

@@ -80,6 +80,42 @@ def test_attention_spec_rejects_invalid_branch_weights():
             raise AssertionError(f"AttentionSpec({kwargs!r}) should raise ValueError")
 
 
+def test_attention_spec_rejects_invalid_dtype():
+    # Regression for #173: an unsupported dtype must fail fast with a clear
+    # ValueError at construction, not an opaque KeyError later in data.torch_dtype.
+    for bad in ("bf16", "float32", "int8", "", "FP16"):
+        try:
+            AttentionSpec(dtype=bad)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"AttentionSpec(dtype={bad!r}) should raise ValueError")
+
+
+def test_attention_spec_accepts_every_supported_dtype():
+    from attention.spec import DTYPES
+    for dt in DTYPES:
+        assert AttentionSpec(dtype=dt).dtype == dt
+
+
+def test_spec_dtypes_match_data_torch_dtype_map():
+    """The validated set must not drift from the dtypes data.py can actually map."""
+    if _skip_if_no_torch():
+        return
+    from attention.spec import DTYPES
+    from attention.data import torch_dtype
+    # every advertised dtype maps to a torch dtype...
+    for dt in DTYPES:
+        assert torch_dtype(dt) is not None
+    # ...and anything outside the set is genuinely unsupported downstream.
+    try:
+        torch_dtype("bf16")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("torch_dtype should not know a dtype AttentionSpec rejects")
+
+
 def test_generate_qkv_uses_spec_shape():
     if _skip_if_no_torch():
         return
