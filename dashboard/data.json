@@ -18,7 +18,7 @@
       "pr": 190,
       "state": "non_gpu_review",
       "title": "fix(attention): reject non-int, invalid dtype, and invalid device at construction",
-      "updated_at": "2026-07-12T05:21:06Z",
+      "updated_at": "2026-07-12T06:37:33Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/190"
     },
     {
@@ -31,7 +31,7 @@
       "pr": 186,
       "state": "non_gpu_review",
       "title": "fix(attention): validate AttentionSpec.dtype instead of a late KeyError (Fixes #173)",
-      "updated_at": "2026-07-12T05:21:10Z",
+      "updated_at": "2026-07-12T06:37:38Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/186"
     },
     {
@@ -44,7 +44,7 @@
       "pr": 183,
       "state": "non_gpu_review",
       "title": "fix(attention): make the adaptive spectral global branch causal (Fixes #180)",
-      "updated_at": "2026-07-12T05:21:14Z",
+      "updated_at": "2026-07-12T06:37:42Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/183"
     },
     {
@@ -57,7 +57,7 @@
       "pr": 156,
       "state": "eval_pending",
       "title": "feat(strategy): rsvd captures 3 subspaces, not 4 (drop redundant col(B) sketch)",
-      "updated_at": "2026-07-12T05:21:21Z",
+      "updated_at": "2026-07-12T06:37:49Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/156"
     },
     {
@@ -70,7 +70,7 @@
       "pr": 182,
       "state": "non_gpu_review",
       "title": "fix(attention): make the adaptive global branch causal (no future leak)",
-      "updated_at": "2026-07-12T05:21:23Z",
+      "updated_at": "2026-07-12T06:37:51Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/182"
     },
     {
@@ -83,7 +83,7 @@
       "pr": 185,
       "state": "eval_pending",
       "title": "feat(strategy): subspace-iteration transform for decaying spectra",
-      "updated_at": "2026-07-12T05:21:29Z",
+      "updated_at": "2026-07-12T06:37:58Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/185"
     },
     {
@@ -96,7 +96,7 @@
       "pr": 188,
       "state": "non_gpu_review",
       "title": "fix(attention): close the causal correlation mixer Q/K kernel future-leak",
-      "updated_at": "2026-07-12T05:21:31Z",
+      "updated_at": "2026-07-12T06:37:59Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/188"
     },
     {
@@ -109,7 +109,7 @@
       "pr": 189,
       "state": "non_gpu_review",
       "title": "fix(strategy): reject non-positive --data-rank instead of silently reinterpreting or crashing",
-      "updated_at": "2026-07-12T05:21:35Z",
+      "updated_at": "2026-07-12T06:38:04Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/189"
     },
     {
@@ -122,7 +122,7 @@
       "pr": 192,
       "state": "eval_pending",
       "title": "feat(strategy): add fixed DCT-II basis transform for smooth data",
-      "updated_at": "2026-07-12T05:21:43Z",
+      "updated_at": "2026-07-12T06:38:11Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/192"
     },
     {
@@ -135,7 +135,7 @@
       "pr": 194,
       "state": "eval_pending",
       "title": "feat(strategy): add nystrom landmark-column transform for low-rank data",
-      "updated_at": "2026-07-12T05:21:47Z",
+      "updated_at": "2026-07-12T06:38:16Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/194"
     },
     {
@@ -148,7 +148,7 @@
       "pr": 195,
       "state": "non_gpu_review",
       "title": "fix(attention): make adaptive spectral global branch causal (Fixes #180, resubmit #172)",
-      "updated_at": "2026-07-12T05:21:49Z",
+      "updated_at": "2026-07-12T06:38:17Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/195"
     },
     {
@@ -161,7 +161,7 @@
       "pr": 196,
       "state": "non_gpu_review",
       "title": "fix(attention): make adaptive spectral global branch causal",
-      "updated_at": "2026-07-12T05:21:53Z",
+      "updated_at": "2026-07-12T06:38:22Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/196"
     },
     {
@@ -174,7 +174,7 @@
       "pr": 203,
       "state": "non_gpu_review",
       "title": "fix(strategy): budget stream_gemm_right's resident (n,m) device output (Fixes #202)",
-      "updated_at": "2026-07-12T05:21:57Z",
+      "updated_at": "2026-07-12T06:38:27Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/203"
     },
     {
@@ -187,7 +187,7 @@
       "pr": 205,
       "state": "non_gpu_review",
       "title": "fix(strategy): budget stream_gemm_left_t's resident (n,m) accumulator (Fixes #204)",
-      "updated_at": "2026-07-12T05:22:01Z",
+      "updated_at": "2026-07-12T06:38:31Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/205"
     }
   ],
@@ -203,7 +203,7 @@
       "pr": 156,
       "state": "eval_pending",
       "title": "feat(strategy): rsvd captures 3 subspaces, not 4 (drop redundant col(B) sketch)",
-      "updated_at": "2026-07-12T05:21:21Z",
+      "updated_at": "2026-07-12T06:37:49Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/156"
     },
     {
@@ -217,7 +217,7 @@
       "pr": 185,
       "state": "eval_pending",
       "title": "feat(strategy): subspace-iteration transform for decaying spectra",
-      "updated_at": "2026-07-12T05:21:29Z",
+      "updated_at": "2026-07-12T06:37:58Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/185"
     },
     {
@@ -231,7 +231,7 @@
       "pr": 192,
       "state": "eval_pending",
       "title": "feat(strategy): add fixed DCT-II basis transform for smooth data",
-      "updated_at": "2026-07-12T05:21:43Z",
+      "updated_at": "2026-07-12T06:38:11Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/192"
     },
     {
@@ -245,9 +245,9 @@
       "pr": 194,
       "state": "eval_pending",
       "title": "feat(strategy): add nystrom landmark-column transform for low-rank data",
-      "updated_at": "2026-07-12T05:21:47Z",
+      "updated_at": "2026-07-12T06:38:16Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/194"
     }
   ],
-  "updated": "2026-07-12T06:38:34+00:00"
+  "updated": "2026-07-12T08:57:25+00:00"
 }
