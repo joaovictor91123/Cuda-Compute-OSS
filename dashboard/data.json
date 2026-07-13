@@ -9,18 +9,6 @@
   },
   "open_prs": [
     {
-      "author": "RealDiligent",
-      "detail": "This PR still has merge conflicts with the base branch. Resolve them within 12 hours of the bot reminder to keep it open.",
-      "gpu_required": false,
-      "head_sha": "a7d10db29e6e8c76b0fe20d780e4c07508341b51",
-      "kind": null,
-      "pr": 206,
-      "state": "needs_merge_conflict_resolution",
-      "title": "fix(strategy): report unknown --transform cleanly instead of KeyError traceback (Fixes #199)",
-      "updated_at": "2026-07-13T05:26:21Z",
-      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/206"
-    },
-    {
       "author": "ultrahighsuper",
       "detail": "This PR still has merge conflicts with the base branch. Resolve them within 12 hours of the bot reminder to keep it open.",
       "gpu_required": false,
@@ -42,7 +30,7 @@
       "pr": 185,
       "state": "eval_pending",
       "title": "feat(strategy): subspace-iteration transform for decaying spectra",
-      "updated_at": "2026-07-13T07:42:59Z",
+      "updated_at": "2026-07-13T10:34:44Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/185"
     },
     {
@@ -55,7 +43,7 @@
       "pr": 192,
       "state": "eval_pending",
       "title": "feat(strategy): add fixed DCT-II basis transform for smooth data",
-      "updated_at": "2026-07-13T07:43:05Z",
+      "updated_at": "2026-07-13T10:34:49Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/192"
     },
     {
@@ -68,7 +56,7 @@
       "pr": 194,
       "state": "eval_pending",
       "title": "feat(strategy): add nystrom landmark-column transform for low-rank data",
-      "updated_at": "2026-07-13T07:43:10Z",
+      "updated_at": "2026-07-13T10:34:53Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/194"
     },
     {
@@ -81,7 +69,7 @@
       "pr": 215,
       "state": "non_gpu_review",
       "title": "fix(strategy): stop reporting a <1x FLOP ratio as \"fewer FLOPs than exact\"",
-      "updated_at": "2026-07-13T07:43:12Z",
+      "updated_at": "2026-07-13T10:34:55Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/215"
     },
     {
@@ -94,7 +82,7 @@
       "pr": 221,
       "state": "non_gpu_review",
       "title": "fix(strategy): budget compress()'s resident (m,m) accumulator, not just the product (Fixes #220)",
-      "updated_at": "2026-07-13T07:43:18Z",
+      "updated_at": "2026-07-13T10:35:00Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/221"
     },
     {
@@ -107,8 +95,21 @@
       "pr": 223,
       "state": "non_gpu_review",
       "title": "fix(strategy): validate dtype in the public subspace_matmul() API (Fixes #222)",
-      "updated_at": "2026-07-13T07:43:23Z",
+      "updated_at": "2026-07-13T10:35:05Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/223"
+    },
+    {
+      "author": "RealDiligent",
+      "detail": "CPU-safe CI only; no GPU scorecard or queue entry required.",
+      "gpu_required": false,
+      "head_sha": "bf79f1d814d00ebe330ba8c7eb0f4e932153daa3",
+      "kind": "fix",
+      "label": "status:ready-non-gpu",
+      "pr": 206,
+      "state": "non_gpu_review",
+      "title": "fix(strategy): report unknown --transform cleanly instead of KeyError traceback (Fixes #199)",
+      "updated_at": "2026-07-13T11:42:51Z",
+      "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/206"
     }
   ],
   "queue": [
@@ -123,7 +124,7 @@
       "pr": 185,
       "state": "eval_pending",
       "title": "feat(strategy): subspace-iteration transform for decaying spectra",
-      "updated_at": "2026-07-13T07:42:59Z",
+      "updated_at": "2026-07-13T10:34:44Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/185"
     },
     {
@@ -137,7 +138,7 @@
       "pr": 192,
       "state": "eval_pending",
       "title": "feat(strategy): add fixed DCT-II basis transform for smooth data",
-      "updated_at": "2026-07-13T07:43:05Z",
+      "updated_at": "2026-07-13T10:34:49Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/192"
     },
     {
@@ -151,9 +152,9 @@
       "pr": 194,
       "state": "eval_pending",
       "title": "feat(strategy): add nystrom landmark-column transform for low-rank data",
-      "updated_at": "2026-07-13T07:43:10Z",
+      "updated_at": "2026-07-13T10:34:53Z",
       "url": "https://github.com/zeokin/Cuda-Compute-OSS/pull/194"
     }
   ],
-  "updated": "2026-07-13T10:35:08+00:00"
+  "updated": "2026-07-13T11:45:50+00:00"
 }
