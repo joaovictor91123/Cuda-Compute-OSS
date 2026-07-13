@@ -58,5 +58,34 @@ def test_positive_data_rank_is_unaffected(capsys):
         assert "--data-rank" not in capsys.readouterr().err
 
 
+# attention.benchmark is the third CLI; it must convert the same class of
+# invalid-knob failures into exit 2 + an ``error:`` line, not an uncaught
+# traceback (#201). These are benchmark-only knobs (temperature, landmarks,
+# branch weights, landmark-policy) that AttentionSpec / the hybrid helpers
+# reject, so none is shared with BAD_ARGS above. run_once validates before any
+# device work, and its _torch()/GPU path also raises cleanly here -- so with or
+# without PyTorch installed, each case must return 2 rather than raise.
+BENCHMARK_BAD_ARGS = [
+    ["--batch", "0", "--seq", "8"],            # AttentionSpec: batch > 0
+    ["--heads", "0", "--seq", "8"],            # AttentionSpec: heads > 0
+    ["--seq", "0"],                            # AttentionSpec: seq > 0
+    ["--seq", "8", "--local-weight", "-1"],    # AttentionSpec: weights >= 0
+    ["--seq", "8", "--local-weight", "0", "--global-weight", "0"],  # one must be > 0
+    # temperature / landmarks are only consumed by the modes that use them, so
+    # pair each with that mode -- otherwise the invalid value is never reached.
+    ["--seq", "8", "--mode", "corrfft", "--temperature", "0"],   # temperature > 0
+    ["--seq", "8", "--mode", "landmark", "--landmarks", "0"],    # num_landmarks > 0
+]
+
+
+@pytest.mark.parametrize("argv", BENCHMARK_BAD_ARGS, ids=lambda a: " ".join(a))
+def test_attention_benchmark_bad_args_exit_cleanly(argv, capsys):
+    from attention import benchmark as attention_benchmark
+
+    rc = attention_benchmark.main(argv)
+    assert rc == 2, f"expected exit 2 for {argv}, got {rc}"
+    assert "error:" in capsys.readouterr().err
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
