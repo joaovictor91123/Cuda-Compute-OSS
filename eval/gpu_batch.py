@@ -15,13 +15,16 @@ import hashlib
 import json
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+
+from . import tracks
 
 DEFAULT_QUEUE = "dashboard/data.json"
 DEFAULT_WORKDIR = "_gpu_batch_work"
 DEFAULT_RESULTS_DIR = "gpu-results"
 MOCK_GPU_NAME = "RTX 5090 (mock)"
+DEFAULT_RUNS = 5          # fresh unseen seeds per PR; verdict is worst-case over them
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,62 @@ class QueueItem:
     head_sha: str
     position: int | None = None
     url: str = ""
+    track: str | None = None      # declared track -> pinned regime (eval.tracks)
+
+
+def spec_for_track(spec: EvalSpec, track: str | None) -> "EvalSpec":
+    """Override the regime knobs with the declared track's PINNED regime, so a PR
+    is scored at its track's fixed (fill, rank, M) — not knobs it chose. Unknown
+    or unspecified track => unchanged (falls back to the full-rank reference)."""
+    if not track or track not in tracks.TRACKS:
+        return spec
+    ts = tracks.TRACKS[track]
+    return replace(
+        spec,
+        fill=ts.fill,
+        data_rank=ts.data_rank,
+        rank_m=ts.rank_m if ts.rank_m is not None else spec.rank_m,
+    )
+
+
+def aggregate_runs(runs: list[dict]) -> dict:
+    """Combine K per-seed eval outputs into ONE worst-case verdict per transform.
+
+    A transform is admitted only if it dominates exact on EVERY run (no lucky
+    seed): accuracy=min, latency=max, VRAM=max across the K runs; improvement
+    requires all runs dominant; gated if any run gated; recorded score is the
+    min (worst) across runs, else 0. Pure — no I/O, so it's fully unit-tested."""
+    if not runs:
+        raise ValueError("aggregate_runs needs at least one run")
+    base = dict(runs[0])                                   # config/exact/complexity from run 0
+    names = set(runs[0].get("transforms", {}))
+    for r in runs[1:]:
+        names &= set(r.get("transforms", {}))
+    agg: dict = {}
+    for name in names:
+        cells = [r["transforms"][name] for r in runs]
+        dominant = all(c.get("improvement") for c in cells)
+        agg[name] = {
+            "accuracy": min(c["accuracy"] for c in cells),
+            "latency_s": max(c["latency_s"] for c in cells),
+            "peak_vram_bytes": max(c["peak_vram_bytes"] for c in cells),
+            "peak_vram_mib": max(c["peak_vram_mib"] for c in cells),
+            "flop_ratio_vs_exact": min(c["flop_ratio_vs_exact"] for c in cells),
+            "faster_than_exact": all(c.get("faster_than_exact") for c in cells),
+            "less_vram_than_exact": all(c.get("less_vram_than_exact") for c in cells),
+            "fewer_flops_than_exact": all(c.get("fewer_flops_than_exact") for c in cells),
+            "gated": any(c.get("gated") for c in cells),
+            "improvement": dominant,
+            "score": min(c.get("score", 0.0) for c in cells) if dominant else 0.0,
+            "runs": len(cells),
+            "seeds": [r.get("config", {}).get("seed") for r in runs],
+        }
+    ranking = sorted(agg, key=lambda k: agg[k]["score"], reverse=True)
+    base["transforms"] = agg
+    base["ranking"] = ranking
+    base["best"] = ranking[0] if ranking else None
+    base["aggregation"] = {"runs": len(runs), "rule": "worst-case over fresh unseen seeds"}
+    return base
 
 
 @dataclass(frozen=True)
@@ -59,6 +118,7 @@ def load_queue(path: str | Path) -> list[QueueItem]:
                 head_sha=raw.get("head_sha", ""),
                 position=raw.get("position"),
                 url=raw.get("url", ""),
+                track=raw.get("track"),
             )
         )
     return sorted(items, key=lambda item: item.position or item.pr)
@@ -204,6 +264,20 @@ def _run(cmd: list[str] | str, *, cwd: str | Path | None = None, capture: bool =
     )
 
 
+def _rebase_onto_main(checkout: Path) -> bool:
+    """Rebase the checked-out PR onto origin/main. Return True on success; on a
+    conflict, abort cleanly and return False (the PR must be scored against the
+    CURRENT frontier + shared code, never its stale branch)."""
+    _run(["git", "fetch", "origin", "main"], cwd=checkout)
+    r = subprocess.run(["git", "rebase", "origin/main"], cwd=checkout,
+                       text=True, capture_output=True)
+    if r.returncode != 0:
+        subprocess.run(["git", "rebase", "--abort"], cwd=checkout,
+                       text=True, capture_output=True)
+        return False
+    return True
+
+
 def run_item(
     item: QueueItem,
     *,
@@ -213,13 +287,20 @@ def run_item(
     spec: EvalSpec,
     clean: bool = False,
     mock: bool = False,
+    runs: int = DEFAULT_RUNS,
+    sweep: str | None = None,
 ) -> Path:
-    """Execute one queued PR sequentially and return the JSON result path."""
+    """Score one queued PR: rebase onto main, run the declared track's PINNED
+    regime over ``runs`` fresh unseen seeds, and record the WORST-CASE verdict.
+    Returns the JSON result path."""
     workdir = Path(workdir)
     results_dir = Path(results_dir)
     checkout = workdir / f"pr-{item.pr}"
     result = result_path(item, results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
+
+    # Pin the regime to the declared track (ignore any knobs the PR chose).
+    spec = spec_for_track(spec, item.track)
 
     if mock:
         result.write_text(json.dumps(mock_result(item, spec), indent=2) + "\n",
@@ -241,6 +322,17 @@ def run_item(
             f"PR #{item.pr} checked out {actual_sha}, expected queued SHA {item.head_sha}"
         )
 
+    # Score the MERGED state, not the branch: rebase onto current main so the
+    # frontier transform (rsvd) and shared code are current. Conflict => skip.
+    if not _rebase_onto_main(checkout):
+        result.write_text(json.dumps({
+            "pr": item.pr, "title": item.title, "author": item.author,
+            "head_sha": item.head_sha, "url": item.url, "mock": False,
+            "state": "needs_rebase",
+            "detail": "conflicts with main; contributor must rebase before scoring",
+        }, indent=2) + "\n", encoding="utf-8")
+        return result
+
     _run(["uv", "sync", "--extra", "test", "--extra", "gpu"], cwd=checkout)
     _run("uv run --extra test python -m py_compile $(find matmul strategy eval tests examples -name '*.py')",
          cwd=checkout)
@@ -248,9 +340,28 @@ def run_item(
           "tests/", "strategy/tests/", "eval/tests/", "-v"], cwd=checkout)
     _run(["uv", "run", "python", "-m", "strategy.smoke"], cwd=checkout)
 
-    completed = _run(eval_args(spec), cwd=checkout, capture=True)
-    result.write_text(json.dumps(wrap_result(item, completed.stdout), indent=2) + "\n",
-                      encoding="utf-8")
+    # K fresh unseen seeds (spec.seed stays None so each run draws its own), then
+    # collapse to the worst case -- a real win survives every seed.
+    outputs = []
+    for _ in range(max(1, runs)):
+        completed = _run(eval_args(spec), cwd=checkout, capture=True)
+        outputs.append(json.loads(completed.stdout))
+    aggregate = aggregate_runs(outputs)
+
+    # Empirical scaling fit (the sub-cubic proof), once.
+    if sweep:
+        sw = _run(eval_args(replace(spec, seed=None)) + ["--sweep", sweep],
+                  cwd=checkout, capture=True)
+        sweep_out = json.loads(sw.stdout).get("scaling")
+        if sweep_out:
+            aggregate["scaling"] = sweep_out
+
+    wrapped = {
+        "pr": item.pr, "title": item.title, "author": item.author,
+        "head_sha": item.head_sha, "url": item.url, "mock": False,
+        "track": item.track, "eval": aggregate,
+    }
+    result.write_text(json.dumps(wrapped, indent=2) + "\n", encoding="utf-8")
     return result
 
 
@@ -282,6 +393,10 @@ def main(argv=None) -> int:
     parser.add_argument("--seed", type=int, default=None,
                         help="omit for fresh unseen inputs; pass only to reproduce a run")
     parser.add_argument("--device", type=int, default=0)
+    parser.add_argument("--runs", type=int, default=DEFAULT_RUNS,
+                        help="fresh unseen seeds per PR; verdict is worst-case over them")
+    parser.add_argument("--sweep", default=None,
+                        help="comma-separated N sizes for the scaling fit (e.g. 2048,4096,8192)")
     args = parser.parse_args(argv)
 
     spec = EvalSpec(
@@ -311,6 +426,8 @@ def main(argv=None) -> int:
                 spec=spec,
                 clean=args.clean,
                 mock=args.mock,
+                runs=args.runs,
+                sweep=args.sweep,
             )
             print(f"  wrote {result}")
         else:
