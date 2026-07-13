@@ -666,30 +666,48 @@ def run_once(
 
     outcomes = []
     for pr in open_prs:
-        diff = diff_by_pr.get(pr.number, client.get_diff(pr.number))
-        comments = client.get_comments(pr.number)
-        # Every earlier PR (any state -- open, closed, or merged) is a valid
-        # copycat comparison target; PR number order is creation order.
-        originals = [(p.author, fp_by_pr[p.number]) for p in all_prs if p.number < pr.number]
-        outcome = process_pr(
-            pr,
-            diff,
-            comments,
-            blocked,
-            originals,
-            excess_pr_numbers,
-            commit_messages_by_pr.get(pr.number, ""),
-            now,
-            run_eval,
-            reviews=reviews_by_pr.get(pr.number, []),
-        )
+        # One PR's failure -- a transient GitHub error on its read, or an
+        # unexpected decision-time bug -- must not abort the whole sweep or
+        # fail an unrelated PR's status check. Isolate each PR: log and skip.
+        try:
+            diff = diff_by_pr.get(pr.number, client.get_diff(pr.number))
+            comments = client.get_comments(pr.number)
+            # Every earlier PR (any state -- open, closed, or merged) is a valid
+            # copycat comparison target; PR number order is creation order.
+            originals = [(p.author, fp_by_pr[p.number]) for p in all_prs if p.number < pr.number]
+            outcome = process_pr(
+                pr,
+                diff,
+                comments,
+                blocked,
+                originals,
+                excess_pr_numbers,
+                commit_messages_by_pr.get(pr.number, ""),
+                now,
+                run_eval,
+                reviews=reviews_by_pr.get(pr.number, []),
+            )
+        except Exception as exc:  # noqa: BLE001 -- resilience: never abort the batch
+            print(f"PR #{pr.number}: skipped this sweep -- {exc}")
+            continue
         outcomes.append(outcome)
 
         if not dry_run:
-            _apply(client, pr, outcome, comments)
+            try:
+                _apply(client, pr, outcome, comments)
+            except Exception as exc:  # noqa: BLE001
+                # The decision is already recorded in `outcomes`, so the
+                # dashboard still reflects it; the next sweep retries the
+                # write-back idempotently via the SHA/result markers.
+                print(f"PR #{pr.number}: write-back failed, continuing -- {exc}")
 
     if dashboard_data:
-        write_queue_dashboard(dashboard_data, build_queue_dashboard(open_prs, outcomes))
+        # The queue feed is built from already-computed outcomes, so publish it
+        # even if some individual write-backs failed above.
+        try:
+            write_queue_dashboard(dashboard_data, build_queue_dashboard(open_prs, outcomes))
+        except Exception as exc:  # noqa: BLE001
+            print(f"dashboard write failed -- {exc}")
     return outcomes
 
 
