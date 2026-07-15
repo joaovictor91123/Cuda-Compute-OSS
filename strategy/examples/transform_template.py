@@ -23,7 +23,7 @@ class MyTransform(Transform):
 
     name = "mine"  # rename -- this is what --transform/--transforms selects
 
-    def basis(self, n, m, backend, dtype, A=None, B=None):
+    def basis(self, n, m, backend, dtype, A=None, B=None, frac=None):
         """Return an (n, m) array on backend.xp with ORTHONORMAL columns.
 
         n, m    : full dimension and target subspace dimension (m << n).
@@ -36,6 +36,13 @@ class MyTransform(Transform):
         A, B    : the two operand matrices, host-side (NumPy/memmap), if your
                   basis is DATA-DEPENDENT (like rsvd). Ignore them if your
                   basis is fixed / data-independent (like a DCT basis).
+        frac    : fraction of free device memory one streamed row-block may use
+                  (Config.vram_fraction when driven by the strategy; None means
+                  "use the streaming default"). Forward it to any stream_gemm_*
+                  helpers you call so the basis stage honours the same VRAM
+                  budget as compress/reconstruct -- multiply_subspace only
+                  passes frac to a basis() that declares it, so dropping the
+                  parameter silently ignores --vram-fraction here.
         """
         xp = backend.xp
         # ... build an (n, m) matrix here ...
