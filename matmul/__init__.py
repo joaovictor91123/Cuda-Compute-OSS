@@ -41,7 +41,19 @@ def matmul(A: np.ndarray, B: np.ndarray, out: np.ndarray | None = None,
     # torch.bmm after the backend is already built. (Called unconditionally, even
     # when a config is supplied, so a bad A/B dtype never reaches the GPU.)
     dtype_name = _dtype_name(A.dtype)
-    cfg = config or Config(dtype=dtype_name, verbose=False)
+    if config is None:
+        cfg = Config(dtype=dtype_name, verbose=False)
+    else:
+        # Budgets (_fits_in_core / auto_tile) use cfg.item_bytes, but uploads use
+        # the real A/B dtype. A mismatched config.dtype would under-budget (e.g.
+        # fp32 arrays + Config(dtype="fp16") → 2x too small) and OOM instead of
+        # tiling. Reject before the backend is built.
+        if config.dtype != dtype_name:
+            raise ValueError(
+                f"config.dtype={config.dtype!r} does not match A/B dtype "
+                f"{dtype_name!r} ({np.dtype(A.dtype)})"
+            )
+        cfg = config
     backend = Backend(cfg.device, cfg.verbose)
     C = out if out is not None else np.empty_like(A, dtype=cfg.np_dtype)
     gemm.multiply(A, B, C, backend, cfg)

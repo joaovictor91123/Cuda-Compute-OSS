@@ -59,6 +59,23 @@ def test_subspace_matmul_rejects_dtype_mismatch_before_backend():
         raise AssertionError("mismatched dtypes should raise ValueError")
 
 
+def test_subspace_matmul_rejects_config_dtype_mismatch_before_backend():
+    # config.dtype must agree with A/B -- otherwise budgets use cfg.item_bytes
+    # while uploads use the real array dtype (under-budget / OOM).
+    from strategy import Config
+
+    A = _square(np.float32)
+    try:
+        subspace_matmul(A, A.copy(), config=Config(dtype="fp16", verbose=False))
+    except ValueError as e:
+        assert "config.dtype" in str(e)
+        assert "fp16" in str(e) and "fp32" in str(e)
+    else:
+        raise AssertionError(
+            "subspace_matmul(fp32, config=fp16) should raise ValueError before Backend()"
+        )
+
+
 def test_subspace_matmul_shape_guard_still_fires_first():
     # A non-square input must still be rejected by the pre-existing shape guard.
     A = np.ones((8, 5), dtype=np.float32)

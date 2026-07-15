@@ -59,6 +59,24 @@ def test_matmul_rejects_dtype_mismatch_before_backend():
         raise AssertionError("matmul on mismatched dtypes should raise ValueError")
 
 
+def test_matmul_rejects_config_dtype_mismatch_before_backend():
+    # config.dtype must agree with A/B -- otherwise VRAM budgets use
+    # cfg.item_bytes while uploads use the real array dtype (OOM path).
+    from matmul import Config
+
+    A = np.ones((8, 8), dtype=np.float32)
+    B = A.copy()
+    try:
+        matmul(A, B, config=Config(dtype="fp16", verbose=False))
+    except ValueError as e:
+        assert "config.dtype" in str(e)
+        assert "fp16" in str(e) and "fp32" in str(e)
+    else:
+        raise AssertionError(
+            "matmul(fp32, config=fp16) should raise ValueError before Backend()"
+        )
+
+
 def test_matmul_shape_check_still_first():
     # The pre-existing square/shape guard must still fire (and not be shadowed
     # by the new dtype checks) for a non-square input.
