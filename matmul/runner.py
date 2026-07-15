@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from numbers import Integral
 import numpy as np
 
 from .backend import Backend
@@ -26,6 +27,8 @@ def run(n: int, cfg: Config, fill: str = "random",
     Returns a dict with timing, GFLOP/s, and (if verify) accuracy vs a float64
     reference. verify only runs for small n (the reference is computed on CPU).
     """
+    if isinstance(n, bool) or not isinstance(n, Integral) or n < 1:
+        raise ValueError(f"n must be a positive integer, got {n!r}")
     backend = Backend(cfg.device, cfg.verbose)
     dt = cfg.np_dtype
     on_disk = storage.should_use_disk(
