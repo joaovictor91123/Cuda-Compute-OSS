@@ -40,7 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
                         "decaying-spectrum (default max(1, n//32))")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--verify", action="store_true",
-                   help="report reconstruction error vs a float64 reference")
+                   help="check reconstruction error vs a float64 reference "
+                        "(exit 1 if above the dtype tolerance)")
     p.add_argument("--keep", action="store_true", help="keep on-disk files")
     p.add_argument("--quiet", action="store_true")
     return p
@@ -87,6 +88,11 @@ def main(argv=None) -> int:
         err = info.get("verify", {}).get("max_rel_err")
         tail = f"  rel_err={err:.2e}" if err is not None else ""
         print(f"{info['mode']}  {info['seconds']:.4f}s{tail}")
+    # Fail only on an explicit mismatch. A skipped verify (large / disk-backed n)
+    # returns {"skipped": ...} with no "ok" key -- not a failure. Mirrors matmul.
+    v = info.get("verify")
+    if v and v.get("ok") is False:
+        return 1
     return 0
 
 

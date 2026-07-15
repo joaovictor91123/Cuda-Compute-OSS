@@ -94,7 +94,7 @@ def run(n: int, cfg: Config, fill: str = "lowrank", verify: bool = False,
                     print(f"[strategy] rel. error : skipped ({v['skipped']})")
                 else:
                     print(f"[strategy] rel. error : {v['max_rel_err']:.2e} "
-                          f"(approximate by design)")
+                          f"(tol={v['tol']:.0e}, ok={v['ok']}; approximate by design)")
     finally:
         # Disk-backed A/B/C must not survive a crash any more than a clean run
         # -- without a finally, an exception anywhere above (backend init, the
@@ -192,7 +192,12 @@ def _verify(A, B, C, n: int, cfg: Config, backend: Backend) -> dict:
     it materializes A, B, the reference product and C as float64 in host RAM
     (~4*n*n*8 bytes) and runs an O(n^3) CPU multiply, so it is SKIPPED when that
     working set would not fit safely -- otherwise --verify on a large / disk-backed
-    run OOMs the host after the smart multiply already succeeded."""
+    run OOMs the host after the smart multiply already succeeded.
+
+    Returns ``ok`` / ``tol`` (same contract as ``matmul.runner._verify``) so the
+    CLI can exit 1 on an explicit mismatch -- previously only ``max_rel_err`` was
+    returned and ``strategy --verify`` always exited 0 even at ~100% error.
+    """
     need = 4 * n * n * 8                      # A_f64, B_f64, ref, got
     host_free = backend.host_available_bytes()
     if need > 0.5 * host_free:
@@ -201,4 +206,8 @@ def _verify(A, B, C, n: int, cfg: Config, backend: Backend) -> dict:
     ref = np.asarray(A, dtype=np.float64) @ np.asarray(B, dtype=np.float64)
     got = np.asarray(C, dtype=np.float64)
     rel_err = float(np.linalg.norm(got - ref) / (np.linalg.norm(ref) or 1.0))
-    return {"max_rel_err": rel_err}
+    # Same dtype-scaled tolerances as matmul: fp16 carries large rounding error;
+    # low-rank recoverable couples should land well under these; random/full-rank
+    # with M << N will fail (ok=False) which is the point of --verify.
+    tol = {"fp16": 5e-2, "fp32": 1e-4, "fp64": 1e-10}[cfg.dtype]
+    return {"max_rel_err": rel_err, "tol": tol, "ok": rel_err <= tol}

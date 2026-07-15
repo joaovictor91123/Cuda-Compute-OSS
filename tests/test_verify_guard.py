@@ -63,8 +63,10 @@ def test_strategy_verify_runs_and_skips():
     cfg = StrategyConfig(dtype="fp32", verbose=False)
     ok = strategy_verify(A, B, C, n, cfg, _StubBackend(4 * n * n * 8 * 100))
     assert "skipped" not in ok and ok["max_rel_err"] < 1e-4
+    assert ok["ok"] is True and "tol" in ok
     skipped = strategy_verify(A, B, C, n, cfg, _StubBackend(1))
     assert skipped.get("skipped")
+    assert "ok" not in skipped
 
 
 if __name__ == "__main__":
