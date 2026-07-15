@@ -23,6 +23,8 @@ def exact_attention(q, k, v, *, causal: bool = False):
         out:     (batch, heads, seq, dim)
     """
     torch = _torch()
+    if not isinstance(causal, bool):
+        raise ValueError("causal must be a bool")
     d = q.shape[-1]
     scores = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(float(d))
     if causal:
