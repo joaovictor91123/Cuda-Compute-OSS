@@ -334,8 +334,8 @@
         <p style="margin-top:12px">Trivial today — the N³ term means this is not where the real cost lives.</p>
       </div>
       <div class="card scale-card reveal" style="transition-delay:.06s">
-        <div class="kpi">3.5 TFLOP</div>
-        <div class="sub">N = 12,000 — CCO's reference regime</div>
+        <div class="kpi">1.1 TFLOP</div>
+        <div class="sub">N = 8,192 — CCO's reference regime</div>
         <p style="margin-top:12px">Full-rank data, deliberately the hard case — no structure to exploit for free.</p>
       </div>
       <div class="card scale-card reveal" style="transition-delay:.12s">
@@ -461,7 +461,7 @@
         <div class="tl-body">
           <h3>Matmul arena</h3>
           <p>Approximate and exact-but-cheaper strategies for C = A × B, scored on full-rank, low-rank, and decaying-spectrum regimes. Open for contributions today.</p>
-          <div class="tl-tags"><span class="tag">subspace</span><span class="tag">N=12000</span><span class="tag">open now</span></div>
+          <div class="tl-tags"><span class="tag">subspace</span><span class="tag">N=8192</span><span class="tag">open now</span></div>
         </div>
       </div>
       <div class="tl-row reveal">
@@ -524,7 +524,7 @@
         <p style="margin-bottom:18px">Clone the repo, install PyTorch, and reproduce the matmul reference scorecard on your own GPU — the same numbers a reviewer checks.</p>
         <ul class="feature-list">
           <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span>CUDA or Apple MPS, PyTorch-only</span></li>
-          <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><code style="font-family:var(--mono)">python -m eval --n 12000 --pairs 3</code></span></li>
+          <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span><span><code style="font-family:var(--mono)">python -m eval --n 8192 --pairs 3</code></span></li>
         </ul>
         <a class="btn btn-ghost" style="margin-top:6px" href="https://github.com/zeokin/Cuda-Compute-OSS">See the quickstart</a>
       </div>
