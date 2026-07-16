@@ -14,8 +14,10 @@ import argparse
 import ast
 import hashlib
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from dataclasses import dataclass, replace
@@ -299,6 +301,20 @@ def _verify_cuda(python_cmd: list[str], *, cwd: str | Path) -> None:
     _run([*python_cmd, "-c", CUDA_PROBE], cwd=cwd)
 
 
+def _clear_readonly_and_retry(func, path, exc_info) -> None:
+    """Let ``rmtree`` remove read-only Git objects left by a Windows checkout."""
+    error = exc_info[1]
+    if not isinstance(error, PermissionError):
+        raise error
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def _remove_checkout(checkout: Path) -> None:
+    """Remove a disposable PR checkout, including Windows read-only objects."""
+    shutil.rmtree(checkout, onerror=_clear_readonly_and_retry)
+
+
 def _rebase_onto_main(checkout: Path) -> bool:
     """Rebase the checked-out PR onto origin/main. Return True on success; on a
     conflict, abort cleanly and return False (the PR must be scored against the
@@ -414,7 +430,7 @@ def run_item(
     if checkout.exists():
         if not clean:
             raise FileExistsError(f"{checkout} already exists; pass --clean to replace it")
-        shutil.rmtree(checkout)
+        _remove_checkout(checkout)
 
     workdir.mkdir(parents=True, exist_ok=True)
 
