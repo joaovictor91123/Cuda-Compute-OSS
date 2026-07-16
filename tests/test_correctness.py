@@ -96,7 +96,10 @@ def test_fp16_incore_tiled_parity():
     denom = np.linalg.norm(C_incore.astype(np.float64))
     rel = np.linalg.norm(
         (C_incore - C_tiled).astype(np.float64)) / max(denom, 1e-12)
-    assert rel < 1e-6
+    # Both paths accumulate fp32 products but reduce them in different block
+    # orders before their common fp16 store.  cuBLAS implementations may make
+    # that final rounding differ by a few fp16 ulps across GPU generations.
+    assert rel < 1e-5
 
 
 def test_tile_larger_than_n():
