@@ -17,6 +17,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -27,6 +28,13 @@ DEFAULT_WORKDIR = "_gpu_batch_work"
 DEFAULT_RESULTS_DIR = "gpu-results"
 MOCK_GPU_NAME = "RTX 5090 (mock)"
 DEFAULT_RUNS = 5          # fresh unseen seeds per PR; verdict is worst-case over them
+SOURCE_ROOTS = ("matmul", "strategy", "eval", "tests", "examples")
+CUDA_PROBE = (
+    "import torch; "
+    "assert torch.cuda.is_available(), "
+    "'CUDA is unavailable in this PR worktree; refusing CPU evaluation'; "
+    "print('GPU OK:', torch.__version__, torch.cuda.get_device_name(0))"
+)
 
 
 @dataclass(frozen=True)
@@ -134,9 +142,19 @@ def select_batch(queue: list[QueueItem], limit: int | None) -> list[QueueItem]:
     return queue[:limit]
 
 
-def eval_args(spec: EvalSpec) -> list[str]:
+def python_command(*, active_python: bool = False) -> list[str]:
+    """Return the interpreter command for a checked-out PR.
+
+    Windows CUDA installations retain their activated interpreter: uv's default
+    PyPI Torch wheel is CPU-only there. The normal Linux workflow keeps using
+    uv so it resolves the project environment in the PR worktree.
+    """
+    return [sys.executable] if active_python else ["uv", "run", "python"]
+
+
+def eval_args(spec: EvalSpec, *, python_cmd: list[str] | None = None) -> list[str]:
     args = [
-        "uv", "run", "python", "-m", "eval",
+        *(python_cmd or python_command()), "-m", "eval",
         "--n", str(spec.n),
         "--pairs", str(spec.pairs),
         "--dtype", spec.dtype,
@@ -237,24 +255,32 @@ def plan_item(
     workdir: str | Path,
     results_dir: str | Path,
     spec: EvalSpec,
+    active_python: bool = False,
 ) -> list[str]:
     checkout = Path(workdir) / f"pr-{item.pr}"
     result = (Path.cwd() / result_path(item, results_dir))
-    return [
+    python_cmd = python_command(active_python=active_python)
+    python_text = " ".join(python_cmd)
+    commands = [
         f"gh repo clone {repo} {checkout}",
         f"cd {checkout} && gh pr checkout {item.pr}",
         f"cd {checkout} && test \"$(git rev-parse HEAD)\" = \"{item.head_sha}\"",
-        f"cd {checkout} && uv sync --extra test --extra gpu",
-        f"cd {checkout} && uv run --extra test python -m py_compile $(find matmul strategy eval tests examples -name '*.py')",
-        f"cd {checkout} && uv run --extra test python -m pytest tests/ strategy/tests/ eval/tests/ -v",
-        f"cd {checkout} && uv run python -m strategy.smoke",
+    ]
+    if not active_python:
+        commands.append(f"cd {checkout} && uv sync --extra test --extra gpu")
+    commands += [
+        f"cd {checkout} && {python_text} -c \"{CUDA_PROBE}\"",
+        f"cd {checkout} && {python_text} -m compileall -q {' '.join(SOURCE_ROOTS)}",
+        f"cd {checkout} && {python_text} -m pytest tests/ strategy/tests/ eval/tests/ -v",
+        f"cd {checkout} && {python_text} -m strategy.smoke",
         "cd "
         + str(checkout)
         + " && "
-        + " ".join(eval_args(spec))
+        + " ".join(eval_args(spec, python_cmd=python_cmd))
         + " > "
         + str(result),
     ]
+    return commands
 
 
 def _run(cmd: list[str] | str, *, cwd: str | Path | None = None, capture: bool = False):
@@ -266,6 +292,11 @@ def _run(cmd: list[str] | str, *, cwd: str | Path | None = None, capture: bool =
         capture_output=capture,
         check=True,
     )
+
+
+def _verify_cuda(python_cmd: list[str], *, cwd: str | Path) -> None:
+    """Fail before tests or scoring if a PR worktree would use CPU Torch."""
+    _run([*python_cmd, "-c", CUDA_PROBE], cwd=cwd)
 
 
 def _rebase_onto_main(checkout: Path) -> bool:
@@ -361,6 +392,7 @@ def run_item(
     mock: bool = False,
     runs: int = DEFAULT_RUNS,
     sweep: str | None = None,
+    active_python: bool = False,
 ) -> Path:
     """Score one queued PR: rebase onto main, run the declared track's PINNED
     regime over ``runs`` fresh unseen seeds, and record the WORST-CASE verdict.
@@ -418,24 +450,26 @@ def run_item(
             return result
         spec = replace(spec, transforms=item.transform)
 
-    _run(["uv", "sync", "--extra", "test", "--extra", "gpu"], cwd=checkout)
-    _run("uv run --extra test python -m py_compile $(find matmul strategy eval tests examples -name '*.py')",
+    if not active_python:
+        _run(["uv", "sync", "--extra", "test", "--extra", "gpu"], cwd=checkout)
+    python_cmd = python_command(active_python=active_python)
+    _verify_cuda(python_cmd, cwd=checkout)
+    _run([*python_cmd, "-m", "compileall", "-q", *SOURCE_ROOTS], cwd=checkout)
+    _run([*python_cmd, "-m", "pytest", "tests/", "strategy/tests/", "eval/tests/", "-v"],
          cwd=checkout)
-    _run(["uv", "run", "--extra", "test", "python", "-m", "pytest",
-          "tests/", "strategy/tests/", "eval/tests/", "-v"], cwd=checkout)
-    _run(["uv", "run", "python", "-m", "strategy.smoke"], cwd=checkout)
+    _run([*python_cmd, "-m", "strategy.smoke"], cwd=checkout)
 
     # K fresh unseen seeds (spec.seed stays None so each run draws its own), then
     # collapse to the worst case -- a real win survives every seed.
     outputs = []
     for _ in range(max(1, runs)):
-        completed = _run(eval_args(spec), cwd=checkout, capture=True)
+        completed = _run(eval_args(spec, python_cmd=python_cmd), cwd=checkout, capture=True)
         outputs.append(json.loads(completed.stdout))
     aggregate = aggregate_runs(outputs)
 
     # Empirical scaling fit (the sub-cubic proof), once.
     if sweep:
-        sw = _run(eval_args(replace(spec, seed=None)) + ["--sweep", sweep],
+        sw = _run(eval_args(replace(spec, seed=None), python_cmd=python_cmd) + ["--sweep", sweep],
                   cwd=checkout, capture=True)
         sweep_out = json.loads(sw.stdout).get("scaling")
         if sweep_out:
@@ -463,6 +497,9 @@ def main(argv=None) -> int:
                         help="number of queued PRs to evaluate; <=0 means all")
     parser.add_argument("--run", action="store_true",
                         help="execute the batch. Omit for a dry-run plan.")
+    parser.add_argument("--active-python", action="store_true",
+                        help="run each PR with this process's Python instead of uv; "
+                             "required for Windows CUDA environments")
     parser.add_argument("--mock", action="store_true",
                         help="with --run, write mock RTX 5090 result JSON without gh/GPU")
     parser.add_argument("--clean", action="store_true",
@@ -513,6 +550,7 @@ def main(argv=None) -> int:
                 mock=args.mock,
                 runs=args.runs,
                 sweep=args.sweep,
+                active_python=args.active_python,
             )
             print(f"  wrote {result}")
         else:
@@ -522,6 +560,7 @@ def main(argv=None) -> int:
                 workdir=args.workdir,
                 results_dir=args.results_dir,
                 spec=spec,
+                active_python=args.active_python,
             ):
                 print(f"  {command}")
     return 0
