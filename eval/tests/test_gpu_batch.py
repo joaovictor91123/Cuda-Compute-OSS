@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -10,6 +11,7 @@ from pathlib import Path
 
 from eval.gpu_batch import (
     EvalSpec,
+    QueueItem,
     eval_args,
     load_queue,
     mock_result,
@@ -64,6 +66,11 @@ def test_eval_args_include_seed_when_reproducing():
     assert args[args.index("--seed") + 1] == "123"
 
 
+def test_eval_args_accept_active_python_command():
+    args = eval_args(EvalSpec(), python_cmd=["C:/cuda/python.exe"])
+    assert args[:3] == ["C:/cuda/python.exe", "-m", "eval"]
+
+
 def test_plan_contains_sha_check_and_json_output():
     tmp, path = _queue_file([
         {"pr": 4, "title": "mine", "author": "alice", "head_sha": "abcdef1234567890",
@@ -86,6 +93,64 @@ def test_plan_contains_sha_check_and_json_output():
         assert "_results/pr-4-abcdef123456.json" in joined
     finally:
         tmp.cleanup()
+
+
+def test_active_python_plan_is_portable_and_does_not_create_uv_environment():
+    tmp, path = _queue_file([
+        {"pr": 4, "title": "mine", "author": "alice", "head_sha": "abcdef1234567890",
+         "position": 1},
+    ])
+    try:
+        commands = plan_item(
+            load_queue(path)[0],
+            repo="owner/repo",
+            workdir="_work",
+            results_dir="_results",
+            spec=EvalSpec(),
+            active_python=True,
+        )
+        joined = "\n".join(commands)
+        assert "uv sync" not in joined
+        assert "$(find" not in joined
+        assert "compileall -q matmul strategy eval tests examples" in joined
+        assert sys.executable in joined
+    finally:
+        tmp.cleanup()
+
+
+def test_active_python_run_uses_supplied_interpreter_for_every_pr_command(monkeypatch, tmp_path):
+    item = QueueItem(pr=4, title="mine", author="alice", head_sha="a" * 40)
+    calls = []
+
+    def fake_run(cmd, *, cwd=None, capture=False):
+        calls.append(cmd)
+        if cmd[:3] == ["gh", "repo", "clone"]:
+            Path(cmd[-1]).mkdir(parents=True)
+        if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+            return SimpleNamespace(stdout=item.head_sha + "\n")
+        if cmd[-3:] == ["-m", "eval", "--json"]:
+            return SimpleNamespace(stdout='{"config": {}, "transforms": {}}')
+        if "-m" in cmd and "eval" in cmd:
+            return SimpleNamespace(stdout='{"config": {}, "transforms": {}}')
+        return SimpleNamespace(stdout="")
+
+    monkeypatch.setattr("eval.gpu_batch._run", fake_run)
+    monkeypatch.setattr("eval.gpu_batch._rebase_onto_main", lambda checkout: True)
+    out = run_item(
+        item,
+        repo="owner/repo",
+        workdir=tmp_path / "work",
+        results_dir=tmp_path / "results",
+        spec=EvalSpec(),
+        active_python=True,
+    )
+
+    assert out.exists()
+    python_calls = [cmd for cmd in calls if cmd and cmd[0] == sys.executable]
+    assert python_calls
+    assert not any(cmd and cmd[0] == "uv" for cmd in calls)
+    assert any("compileall" in cmd for cmd in python_calls)
+    assert any("CUDA is unavailable" in " ".join(cmd) for cmd in python_calls)
 
 
 def test_mock_result_has_wrapped_eval_shape():
